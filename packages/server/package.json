@@ -1,0 +1,19 @@
+{
+  "name": "@mindmap/server",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch"
+  },
+  "dependencies": {
+    "@mindmap/core": "*",
+    "fastify": "^5.0.0",
+    "ws": "^8.18.0",
+    "chokidar": "^4.0.0"
+  },
+  "devDependencies": {
+    "@types/ws": "^8.5.0"
+  }
+}
