@@ -9,6 +9,7 @@ import { registerListCommand } from "../src/commands/list.js";
 import { registerNodeCommand } from "../src/commands/node.js";
 import { registerOpenCommand } from "../src/commands/open.js";
 import { registerSearchCommand } from "../src/commands/search.js";
+import { registerServeCommand } from "../src/commands/serve.js";
 import { registerViewCommand } from "../src/commands/view.js";
 import { handleCommandError } from "../src/output.js";
 import { CliError } from "../src/storage.js";
@@ -37,6 +38,7 @@ registerNodeCommand(program);
 registerViewCommand(program);
 registerSearchCommand(program);
 registerExportCommand(program);
+registerServeCommand(program);
 
 const main = async (): Promise<void> => {
   await program.parseAsync(process.argv);
