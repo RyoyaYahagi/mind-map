@@ -1,6 +1,6 @@
 import type { MindMap, NodePosition } from "@mindmap/core";
 import { addNode, deleteNode, editNode, fromJSON, moveNode, setNodePosition, toJSON } from "@mindmap/core";
-import { readFile, readdir, writeFile, mkdir, access } from "node:fs/promises";
+import { readFile, readdir, writeFile, mkdir, access, rename } from "node:fs/promises";
 import { basename, join, dirname } from "node:path";
 import { homedir } from "node:os";
 import { fileURLToPath } from "node:url";
@@ -105,9 +105,15 @@ const loadMap = async (mapId: string): Promise<MindMap> => {
   return fromJSON(raw);
 };
 
+const writeFileAtomically = async (filePath: string, contents: string): Promise<void> => {
+  const tempPath = `${filePath}.${process.pid}.${Date.now()}.tmp`;
+  await writeFile(tempPath, contents, "utf8");
+  await rename(tempPath, filePath);
+};
+
 const saveMap = async (map: MindMap): Promise<void> => {
   const filePath = getMapFilePath(map.id);
-  await writeFile(filePath, `${toJSON(map)}\n`, "utf8");
+  await writeFileAtomically(filePath, `${toJSON(map)}\n`);
 };
 
 const listMapIds = async (): Promise<string[]> => {
