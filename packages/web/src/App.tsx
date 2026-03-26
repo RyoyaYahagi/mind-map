@@ -1,23 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import type { MindMapNode } from "@mindmap/core";
+import type { NodePosition } from "@mindmap/core";
 
 import { ContextMenu } from "./components/ContextMenu.js";
 import { MindMapCanvas } from "./components/MindMapCanvas.js";
+import { getFallbackNodePositions, getNextChildPosition } from "./components/nodeLayout.js";
 import { useMindMap } from "./hooks/useMindMap.js";
-
-type EditorState =
-  | {
-      mode: "add";
-      parentId: string;
-      value: string;
-    }
-  | {
-      mode: "edit";
-      nodeId: string;
-      value: string;
-    }
-  | null;
 
 const DEFAULT_CHILD_TEXT = "新しいノード";
 
@@ -37,17 +25,17 @@ function statusLabel(status: string): string {
 }
 
 export default function App() {
-  const { actions, error, map, status } = useMindMap();
+  const { actions, error, lastAddedNode, map, status } = useMindMap();
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const didInitializeSelection = useRef(false);
-  const [contextMenu, setContextMenu] = useState<{
-    node: MindMapNode | null;
-    position: { x: number; y: number } | null;
-  }>({
-    node: null,
-    position: null,
-  });
-  const [editor, setEditor] = useState<EditorState>(null);
+  const [editingNodeId, setEditingNodeId] = useState<string | null>(null);
+  const [paneContextMenu, setPaneContextMenu] = useState<{
+    flowPosition: NodePosition;
+    position: { x: number; y: number };
+  } | null>(null);
+  const [pendingFocusNodeId, setPendingFocusNodeId] = useState<string | null>(null);
+  const normalizedNodeIdsRef = useRef(new Set<string>());
+  const normalizedMapIdRef = useRef<string | null>(null);
 
   const selectedNode = useMemo(() => {
     if (!map || !selectedNodeId) {
@@ -75,65 +63,96 @@ export default function App() {
   }, [map, selectedNodeId]);
 
   useEffect(() => {
-    if (!map || !editor) {
+    if (editingNodeId && map && !map.nodes[editingNodeId]) {
+      setEditingNodeId(null);
+    }
+  }, [editingNodeId, map]);
+
+  useEffect(() => {
+    if (!map) {
+      normalizedMapIdRef.current = null;
+      normalizedNodeIdsRef.current.clear();
       return;
     }
 
-    if (editor.mode === "edit" && !map.nodes[editor.nodeId]) {
-      setEditor(null);
+    if (normalizedMapIdRef.current !== map.id) {
+      normalizedMapIdRef.current = map.id;
+      normalizedNodeIdsRef.current.clear();
     }
 
-    if (editor.mode === "add" && !map.nodes[editor.parentId]) {
-      setEditor(null);
-    }
-  }, [editor, map]);
+    const fallbackPositions = getFallbackNodePositions(map);
 
-  const openEdit = (nodeId: string) => {
+    for (const node of Object.values(map.nodes)) {
+      if (node.position || normalizedNodeIdsRef.current.has(node.id)) {
+        continue;
+      }
+
+      const fallbackPosition = fallbackPositions[node.id];
+
+      if (!fallbackPosition) {
+        continue;
+      }
+
+      if (actions.setNodePosition(node.id, fallbackPosition)) {
+        normalizedNodeIdsRef.current.add(node.id);
+      }
+    }
+  }, [actions, map]);
+
+  useEffect(() => {
+    if (!lastAddedNode) {
+      return;
+    }
+
+    setPendingFocusNodeId(lastAddedNode.nodeId);
+  }, [lastAddedNode]);
+
+  useEffect(() => {
+    if (!pendingFocusNodeId || !map?.nodes[pendingFocusNodeId]) {
+      return;
+    }
+
+    setSelectedNodeId(pendingFocusNodeId);
+    setPaneContextMenu(null);
+    setEditingNodeId(null);
+    queueMicrotask(() => setEditingNodeId(pendingFocusNodeId));
+    setPendingFocusNodeId(null);
+  }, [map, pendingFocusNodeId]);
+
+  const requestInlineEdit = (nodeId: string) => {
     if (!map?.nodes[nodeId]) {
       return;
     }
 
-    setContextMenu({ node: null, position: null });
-    setEditor({
-      mode: "edit",
-      nodeId,
-      value: map.nodes[nodeId].text,
-    });
+    setPaneContextMenu(null);
+    setEditingNodeId(null);
+    queueMicrotask(() => setEditingNodeId(nodeId));
   };
 
-  const openAddChild = (parentId: string) => {
-    if (!map?.nodes[parentId]) {
+  const createNode = (parentId: string, position?: NodePosition) => {
+    const parentNode = map?.nodes[parentId];
+
+    if (!map || !parentNode) {
       return;
     }
 
-    setContextMenu({ node: null, position: null });
-    setEditor({
-      mode: "add",
-      parentId,
-      value: DEFAULT_CHILD_TEXT,
-    });
+    const nextPosition =
+      position ?? getNextChildPosition(parentNode, parentId === map.rootId);
+
+    setPaneContextMenu(null);
+    actions.addNode(parentId, DEFAULT_CHILD_TEXT, nextPosition);
   };
 
-  const closeEditor = () => setEditor(null);
+  const handleSaveEdit = (nodeId: string, text: string) => {
+    const value = text.trim();
 
-  const saveEditor = () => {
-    if (!editor) {
+    if (!value || !map?.nodes[nodeId]) {
+      setEditingNodeId(null);
       return;
     }
 
-    const value = editor.value.trim();
-
-    if (!value) {
-      return;
-    }
-
-    if (editor.mode === "edit") {
-      actions.editNode(editor.nodeId, value);
-    } else {
-      actions.addNode(editor.parentId, value);
-    }
-
-    setEditor(null);
+    actions.editNode(nodeId, value);
+    setEditingNodeId(null);
   };
 
   const deleteNode = (nodeId: string) => {
@@ -147,24 +166,20 @@ export default function App() {
     }
 
     actions.deleteNode(nodeId);
-    setContextMenu({ node: null, position: null });
+    setPaneContextMenu(null);
+    if (editingNodeId === nodeId) {
+      setEditingNodeId(null);
+    }
     if (selectedNodeId === nodeId) {
       setSelectedNodeId(map.rootId);
     }
   };
 
-  const openContextMenu = (node: MindMapNode, position: { x: number; y: number }) => {
-    setContextMenu({
-      node,
-      position,
-    });
-  };
-
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
-        setContextMenu({ node: null, position: null });
-        setEditor(null);
+        setPaneContextMenu(null);
+        setEditingNodeId(null);
       }
     };
 
@@ -176,7 +191,7 @@ export default function App() {
   const nodeCount = map ? Object.keys(map.nodes).length : 0;
 
   return (
-    <div className="relative flex h-full flex-col text-slate-100">
+    <div className="relative flex h-full min-h-0 flex-col overflow-hidden text-slate-100">
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(56,189,248,0.12),transparent_30%),radial-gradient(circle_at_bottom_right,rgba(15,23,42,0.6),transparent_35%)]" />
 
       <header className="relative z-10 flex items-center justify-between gap-4 border-b border-slate-800/70 bg-slate-950/55 px-5 py-4 backdrop-blur">
@@ -220,99 +235,37 @@ export default function App() {
 
       <main className="relative z-10 flex min-h-0 flex-1 p-4">
         <MindMapCanvas
+          editingNodeId={editingNodeId}
           map={map}
-          onAddChild={openAddChild}
+          onAddChild={(nodeId) => createNode(nodeId)}
+          onAddRootNode={(position) => createNode(map?.rootId ?? "", position)}
           onDeleteNode={deleteNode}
-          onEditNode={openEdit}
-          onOpenContextMenu={openContextMenu}
-          onSelectNode={(nodeId) => setSelectedNodeId(nodeId || null)}
+          onOpenPaneContextMenu={({ flowPosition, x, y }) =>
+            setPaneContextMenu({
+              flowPosition,
+              position: { x, y },
+            })
+          }
+          onRequestEdit={requestInlineEdit}
+          onSaveEdit={handleSaveEdit}
+          onSelectNode={(nodeId) => {
+            setPaneContextMenu(null);
+            setSelectedNodeId(nodeId || null);
+          }}
+          onSetNodePosition={(nodeId, position) => actions.setNodePosition(nodeId, position)}
           selectedNodeId={selectedNodeId}
         />
       </main>
 
       <ContextMenu
-        node={contextMenu.node}
-        onAddChild={() => {
-          if (contextMenu.node) {
-            openAddChild(contextMenu.node.id);
+        onAddRootNode={() => {
+          if (paneContextMenu) {
+            createNode(map?.rootId ?? "", paneContextMenu.flowPosition);
           }
         }}
-        onClose={() => setContextMenu({ node: null, position: null })}
-        onDelete={() => {
-          if (contextMenu.node) {
-            deleteNode(contextMenu.node.id);
-          }
-        }}
-        onEdit={() => {
-          if (contextMenu.node) {
-            openEdit(contextMenu.node.id);
-          }
-        }}
-        position={contextMenu.position}
+        onClose={() => setPaneContextMenu(null)}
+        position={paneContextMenu?.position ?? null}
       />
-
-      {editor ? (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 px-4 backdrop-blur-sm"
-          onMouseDown={() => setEditor(null)}
-          role="presentation"
-        >
-          <form
-            className="w-full max-w-lg rounded-3xl border border-slate-700/80 bg-slate-950 p-5 shadow-[0_40px_120px_rgba(2,6,23,0.55)]"
-            onMouseDown={(event) => event.stopPropagation()}
-            onSubmit={(event) => {
-              event.preventDefault();
-              saveEditor();
-            }}
-          >
-            <p className="text-[10px] font-semibold uppercase tracking-[0.28em] text-slate-500">
-              {editor.mode === "edit" ? "Edit Node" : "Add Child"}
-            </p>
-            <h2 className="mt-2 text-lg font-semibold text-slate-50">
-              {editor.mode === "edit" ? "ノードを編集" : "子ノードを追加"}
-            </h2>
-            <p className="mt-1 text-sm text-slate-400">
-              {editor.mode === "edit"
-                ? "タイトルを変更して Enter で保存します。"
-                : "新しい子ノードの名前を入力して Enter で作成します。"}
-            </p>
-
-            <input
-              autoFocus
-              className="mt-4 w-full rounded-2xl border border-slate-700 bg-slate-900 px-4 py-3 text-sm text-slate-100 outline-none transition placeholder:text-slate-500 focus:border-sky-400/60 focus:ring-2 focus:ring-sky-400/20"
-              onChange={(event) => {
-                const value = event.target.value;
-                setEditor((current) =>
-                  current
-                    ? {
-                        ...current,
-                        value,
-                      }
-                    : current,
-                );
-              }}
-              placeholder="ノード名"
-              value={editor.value}
-            />
-
-            <div className="mt-5 flex items-center justify-end gap-3">
-              <button
-                className="rounded-2xl border border-slate-700 bg-slate-900 px-4 py-2 text-sm text-slate-200 transition hover:border-slate-500"
-                onClick={closeEditor}
-                type="button"
-              >
-                キャンセル
-              </button>
-              <button
-                className="rounded-2xl border border-sky-400/30 bg-sky-400/10 px-4 py-2 text-sm font-medium text-sky-100 transition hover:border-sky-300/50 hover:bg-sky-400/20"
-                type="submit"
-              >
-                保存
-              </button>
-            </div>
-          </form>
-        </div>
-      ) : null}
     </div>
   );
 }

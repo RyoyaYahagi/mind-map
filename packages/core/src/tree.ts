@@ -1,18 +1,33 @@
 import { nanoid } from "nanoid";
 
-import type { MindMap, MindMapNode } from "./types.js";
+import type { MindMap, MindMapNode, NodePosition } from "./types.js";
 
 const createTimestamp = (): string => new Date().toISOString();
+
+const DEFAULT_CHILD_OFFSET_X = 280;
+const DEFAULT_CHILD_OFFSET_Y = 96;
+
+const clonePosition = (position: NodePosition): NodePosition => ({
+  x: position.x,
+  y: position.y,
+});
+
+const createDefaultChildPosition = (parent: MindMapNode): NodePosition => ({
+  x: (parent.position?.x ?? 0) + DEFAULT_CHILD_OFFSET_X,
+  y: (parent.position?.y ?? 0) + parent.children.length * DEFAULT_CHILD_OFFSET_Y,
+});
 
 const createNode = (
   text: string,
   parent: string | null,
   timestamp: string,
+  position: NodePosition,
 ): MindMapNode => ({
   id: nanoid(12),
   text,
   children: [],
   parent,
+  position: clonePosition(position),
   createdAt: timestamp,
   updatedAt: timestamp,
 });
@@ -78,7 +93,7 @@ const isAncestor = (map: MindMap, ancestorId: string, nodeId: string): boolean =
 
 export const createMindMap = (title: string): MindMap => {
   const timestamp = createTimestamp();
-  const root = createNode(title, null, timestamp);
+  const root = createNode(title, null, timestamp, { x: 0, y: 0 });
 
   return {
     version: 1,
@@ -97,10 +112,11 @@ export const addNode = (
   map: MindMap,
   parentId: string,
   text: string,
+  position?: NodePosition,
 ): { map: MindMap; node: MindMapNode } => {
   const parent = requireNode(map, parentId);
   const timestamp = createTimestamp();
-  const node = createNode(text, parentId, timestamp);
+  const node = createNode(text, parentId, timestamp, position ?? createDefaultChildPosition(parent));
   const nodes = cloneNodes(map);
 
   nodes[node.id] = node;
@@ -140,6 +156,24 @@ export const setNote = (map: MindMap, nodeId: string, notes: string): MindMap =>
   nodes[nodeId] = {
     ...node,
     notes,
+    updatedAt: timestamp,
+  };
+
+  return updateMap(map, nodes, timestamp);
+};
+
+export const setNodePosition = (
+  map: MindMap,
+  nodeId: string,
+  position: NodePosition,
+): MindMap => {
+  const node = requireNode(map, nodeId);
+  const timestamp = createTimestamp();
+  const nodes = cloneNodes(map);
+
+  nodes[nodeId] = {
+    ...node,
+    position: clonePosition(position),
     updatedAt: timestamp,
   };
 

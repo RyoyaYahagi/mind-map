@@ -1,9 +1,15 @@
+export interface NodePosition {
+  x: number;
+  y: number;
+}
+
 export interface MindMapNode {
   id: string;
   text: string;
   notes?: string;
   children: string[];
   parent: string | null;
+  position?: NodePosition;
   collapsed?: boolean;
   style?: NodeStyle;
   createdAt: string;

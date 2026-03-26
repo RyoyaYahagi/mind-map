@@ -1,9 +1,11 @@
-import type { MindMap } from "@mindmap/core";
-import { addNode, deleteNode, editNode, fromJSON, moveNode, toJSON } from "@mindmap/core";
-import { readFile, readdir, writeFile, mkdir } from "node:fs/promises";
-import { basename, join } from "node:path";
+import type { MindMap, NodePosition } from "@mindmap/core";
+import { addNode, deleteNode, editNode, fromJSON, moveNode, setNodePosition, toJSON } from "@mindmap/core";
+import { readFile, readdir, writeFile, mkdir, access } from "node:fs/promises";
+import { basename, join, dirname } from "node:path";
 import { homedir } from "node:os";
+import { fileURLToPath } from "node:url";
 import Fastify, { type FastifyInstance } from "fastify";
+import fastifyStatic from "@fastify/static";
 import { WebSocketServer, type WebSocket } from "ws";
 
 import { addClient, broadcast, removeClient } from "./ws.js";
@@ -31,6 +33,8 @@ type NodeParams = {
 type AddNodeBody = {
   parentId: string;
   text: string;
+  position?: NodePosition;
+  requestId?: string;
 };
 
 type EditNodeBody = {
@@ -39,6 +43,10 @@ type EditNodeBody = {
 
 type MoveNodeBody = {
   newParentId: string;
+};
+
+type SetNodePositionBody = {
+  position: NodePosition;
 };
 
 type MessageEnvelope = {
@@ -158,6 +166,33 @@ const assertString = (value: unknown, fieldName: string): string => {
   return value;
 };
 
+const assertOptionalString = (value: unknown, fieldName: string): string | undefined => {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  return assertString(value, fieldName);
+};
+
+const assertPosition = (value: unknown, fieldName: string): NodePosition => {
+  if (typeof value !== "object" || value === null) {
+    throw new Error(`${fieldName} must be an object`);
+  }
+
+  const x = (value as { x?: unknown }).x;
+  const y = (value as { y?: unknown }).y;
+
+  if (typeof x !== "number" || Number.isNaN(x)) {
+    throw new Error(`${fieldName}.x must be a number`);
+  }
+
+  if (typeof y !== "number" || Number.isNaN(y)) {
+    throw new Error(`${fieldName}.y must be a number`);
+  }
+
+  return { x, y };
+};
+
 const respondWithError = (error: unknown): { error: string } => ({
   error: error instanceof Error ? error.message : "Unknown error",
 });
@@ -209,11 +244,34 @@ const updateMapAndPersist = async (mapId: string, updater: (map: MindMap) => Min
   const map = await loadMap(mapId);
   const nextMap = updater(map);
 
+  await saveMapAndBroadcast(nextMap);
+
+  return nextMap;
+};
+
+const saveMapAndBroadcast = async (nextMap: MindMap): Promise<void> => {
   await saveMap(nextMap);
   markLocalWrite(nextMap.id);
   broadcast({ type: "map:update", payload: nextMap });
+};
 
-  return nextMap;
+const findWebDistDir = async (): Promise<string | null> => {
+  const thisFile = fileURLToPath(import.meta.url);
+  const candidates = [
+    join(dirname(thisFile), "..", "..", "web", "dist"),
+    join(dirname(thisFile), "..", "..", "..", "packages", "web", "dist"),
+  ];
+
+  for (const candidate of candidates) {
+    try {
+      await access(candidate);
+      return candidate;
+    } catch {
+      // not found, try next
+    }
+  }
+
+  return null;
 };
 
 export const startServer = async (port: number): Promise<FastifyInstance> => {
@@ -221,6 +279,26 @@ export const startServer = async (port: number): Promise<FastifyInstance> => {
 
   const fastify = Fastify({ logger: true });
   const wss = new WebSocketServer({ noServer: true });
+
+  const webDistDir = await findWebDistDir();
+
+  if (webDistDir) {
+    await fastify.register(fastifyStatic, {
+      root: webDistDir,
+      prefix: "/",
+    });
+
+    // SPA fallback: /api 以外の未知ルートは index.html を返す
+    fastify.setNotFoundHandler(async (request, reply) => {
+      if (request.url.startsWith("/api")) {
+        reply.code(404).send({ error: "Not Found" });
+        return;
+      }
+
+      return reply.sendFile("index.html");
+    });
+  }
+
   const watcher = watchMaps((mapId) => {
     void handleMapChange(mapId);
   });
@@ -253,7 +331,13 @@ export const startServer = async (port: number): Promise<FastifyInstance> => {
       try {
         const parentId = assertString(request.body.parentId, "parentId");
         const text = assertString(request.body.text, "text");
-        const nextMap = await updateMapAndPersist(request.params.id, (map) => addNode(map, parentId, text).map);
+        const position =
+          request.body.position === undefined
+            ? undefined
+            : assertPosition(request.body.position, "position");
+        const nextMap = await updateMapAndPersist(request.params.id, (map) =>
+          addNode(map, parentId, text, position).map,
+        );
 
         return nextMap;
       } catch (error) {
@@ -328,8 +412,27 @@ export const startServer = async (port: number): Promise<FastifyInstance> => {
               const payload = parsed.payload as AddNodeBody;
               const parentId = assertString(payload.parentId, "parentId");
               const text = assertString(payload.text, "text");
+              const position =
+                payload.position === undefined
+                  ? undefined
+                  : assertPosition(payload.position, "position");
+              const requestId = assertOptionalString(payload.requestId, "requestId");
+              const map = await loadMap(activeMapId);
+              const added = addNode(map, parentId, text, position);
 
-              await updateMapAndPersist(activeMapId, (map) => addNode(map, parentId, text).map);
+              await saveMapAndBroadcast(added.map);
+
+              if (requestId) {
+                ws.send(
+                  JSON.stringify({
+                    type: "node:add:ack",
+                    payload: {
+                      nodeId: added.node.id,
+                      requestId,
+                    },
+                  }),
+                );
+              }
               return;
             }
 
@@ -356,6 +459,15 @@ export const startServer = async (port: number): Promise<FastifyInstance> => {
               const newParentId = assertString(payload.newParentId, "newParentId");
 
               await updateMapAndPersist(activeMapId, (map) => moveNode(map, nodeId, newParentId));
+              return;
+            }
+
+            if (parsed.type === "node:position") {
+              const payload = parsed.payload as SetNodePositionBody & { nodeId: string };
+              const nodeId = assertString(payload.nodeId, "nodeId");
+              const position = assertPosition(payload.position, "position");
+
+              await updateMapAndPersist(activeMapId, (map) => setNodePosition(map, nodeId, position));
             }
           } catch (error) {
             ws.send(JSON.stringify({ type: "error", payload: respondWithError(error) }));

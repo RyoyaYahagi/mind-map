@@ -114,6 +114,7 @@ export const mapToNodePayload = (node: MindMapNode) => ({
   notes: node.notes ?? null,
   parentId: node.parent,
   childIds: node.children,
+  position: node.position ?? null,
   createdAt: node.createdAt,
   updatedAt: node.updatedAt,
 });

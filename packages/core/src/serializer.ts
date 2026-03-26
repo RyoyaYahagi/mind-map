@@ -1,4 +1,4 @@
-import type { MindMap, MindMapNode, NodeStyle } from "./types.js";
+import type { MindMap, MindMapNode, NodePosition, NodeStyle } from "./types.js";
 import { addNode, createMindMap, setNote } from "./tree.js";
 
 type ParsedMarkdownNode = {
@@ -45,6 +45,29 @@ const ensureOptionalBoolean = (value: unknown, fieldName: string): boolean | und
   return value;
 };
 
+const validatePosition = (value: unknown, fieldName: string): NodePosition | undefined => {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (!isRecord(value)) {
+    throw new Error(`Invalid mind map JSON: ${fieldName} must be an object`);
+  }
+
+  if (typeof value.x !== "number" || Number.isNaN(value.x)) {
+    throw new Error(`Invalid mind map JSON: ${fieldName}.x must be a number`);
+  }
+
+  if (typeof value.y !== "number" || Number.isNaN(value.y)) {
+    throw new Error(`Invalid mind map JSON: ${fieldName}.y must be a number`);
+  }
+
+  return {
+    x: value.x,
+    y: value.y,
+  };
+};
+
 const validateStyle = (value: unknown, fieldName: string): NodeStyle | undefined => {
   if (value === undefined) {
     return undefined;
@@ -79,6 +102,7 @@ const validateNode = (value: unknown, key: string): MindMapNode => {
     notes: ensureOptionalString(value.notes, `node ${key}.notes`),
     children: [...value.children],
     parent: value.parent,
+    position: validatePosition(value.position, `node ${key}.position`),
     collapsed: ensureOptionalBoolean(value.collapsed, `node ${key}.collapsed`),
     style: validateStyle(value.style, `node ${key}.style`),
     createdAt: ensureString(value.createdAt, `node ${key}.createdAt`),

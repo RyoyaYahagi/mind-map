@@ -1,4 +1,4 @@
-import type { MouseEvent } from "react";
+import { useEffect, useState, type KeyboardEvent, type MouseEvent } from "react";
 
 import { Handle, Position, type Node, type NodeProps } from "@xyflow/react";
 import type { MindMapNode } from "@mindmap/core";
@@ -6,10 +6,11 @@ import type { MindMapNode } from "@mindmap/core";
 export type MindMapNodeData = {
   node: MindMapNode;
   isRoot: boolean;
+  editingNodeId: string | null;
   onAddChild: (nodeId: string) => void;
   onDelete: (nodeId: string) => void;
-  onEdit: (nodeId: string) => void;
-  onOpenContextMenu: (node: MindMapNode, event: MouseEvent<HTMLDivElement>) => void;
+  onRequestEdit: (nodeId: string) => void;
+  onSaveEdit: (nodeId: string, text: string) => void;
   onSelect: (nodeId: string) => void;
 };
 
@@ -18,10 +19,48 @@ type MindMapFlowNode = Node<MindMapNodeData, "mindMapNode">;
 export function MindMapNode({ data, selected }: NodeProps<MindMapFlowNode>) {
   const { node, isRoot } = data;
   const accent = node.style?.color ?? (isRoot ? "#38bdf8" : "#7dd3fc");
+  const [isEditing, setIsEditing] = useState(false);
+  const [editValue, setEditValue] = useState(node.text);
 
-  const handleEdit = (event: MouseEvent<HTMLButtonElement | HTMLDivElement>) => {
-    event.stopPropagation();
-    data.onEdit(node.id);
+  useEffect(() => {
+    setEditValue(node.text);
+  }, [node.text]);
+
+  useEffect(() => {
+    if (data.editingNodeId !== node.id) {
+      return;
+    }
+
+    setEditValue(node.text);
+    setIsEditing(true);
+  }, [data.editingNodeId, node.id, node.text]);
+
+  const openEditor = (event?: MouseEvent<HTMLButtonElement | HTMLDivElement>) => {
+    event?.stopPropagation();
+    data.onSelect(node.id);
+    data.onRequestEdit(node.id);
+    setEditValue(node.text);
+    setIsEditing(true);
+  };
+
+  const closeEditor = () => {
+    setEditValue(node.text);
+    setIsEditing(false);
+  };
+
+  const saveEdit = () => {
+    const value = editValue.trim();
+
+    if (!value) {
+      closeEditor();
+      return;
+    }
+
+    if (value !== node.text) {
+      data.onSaveEdit(node.id, value);
+    }
+
+    setIsEditing(false);
   };
 
   const handleAdd = (event: MouseEvent<HTMLButtonElement>) => {
@@ -38,90 +77,85 @@ export function MindMapNode({ data, selected }: NodeProps<MindMapFlowNode>) {
     data.onSelect(node.id);
   };
 
-  const handleContextMenu = (event: MouseEvent<HTMLDivElement>) => {
-    event.preventDefault();
-    data.onOpenContextMenu(node, event);
+  const handleInputKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    event.stopPropagation();
+
+    if (event.key === "Enter") {
+      event.preventDefault();
+      saveEdit();
+      return;
+    }
+
+    if (event.key === "Escape") {
+      event.preventDefault();
+      closeEditor();
+    }
   };
 
   return (
     <div
       className={[
-        "group relative min-w-[240px] max-w-[300px] select-none rounded-3xl border border-slate-700/80 bg-slate-900/90 px-4 py-3 text-slate-100 shadow-[0_22px_60px_rgba(2,6,23,0.38)] backdrop-blur transition",
-        selected ? "ring-2 ring-sky-400/90" : "hover:border-slate-500/80 hover:bg-slate-900",
+        "group relative overflow-visible select-none rounded-[28px] border bg-slate-950/92 text-slate-100 shadow-[0_22px_60px_rgba(2,6,23,0.38)] backdrop-blur transition",
+        isRoot ? "min-h-[120px] w-[300px] px-7 py-6" : "min-h-[84px] w-[220px] px-5 py-4",
+        selected
+          ? "border-sky-200/90 ring-4 ring-sky-300/75 shadow-[0_0_0_1px_rgba(186,230,253,0.95),0_26px_60px_rgba(14,165,233,0.24)]"
+          : "border-slate-700/80 hover:border-slate-500/80",
       ].join(" ")}
       onClick={handleSelect}
-      onContextMenu={handleContextMenu}
-      onDoubleClick={handleEdit}
       role="button"
       tabIndex={0}
       style={{ boxShadow: `0 0 0 1px ${accent}33, 0 24px 60px rgba(2, 6, 23, 0.35)` }}
     >
-      <Handle
-        className="!h-3 !w-3 !border-2 !border-slate-900 !bg-sky-400"
-        id="top"
-        position={Position.Top}
-        type="target"
-      />
-      <Handle
-        className="!h-3 !w-3 !border-2 !border-slate-900 !bg-sky-400"
-        id="bottom"
-        position={Position.Bottom}
-        type="source"
-      />
+      <Handle className="!h-2 !w-2 !border-0 !bg-transparent !opacity-0" id="source-left" position={Position.Left} type="source" />
+      <Handle className="!h-2 !w-2 !border-0 !bg-transparent !opacity-0" id="source-right" position={Position.Right} type="source" />
+      <Handle className="!h-2 !w-2 !border-0 !bg-transparent !opacity-0" id="target-left" position={Position.Left} type="target" />
+      <Handle className="!h-2 !w-2 !border-0 !bg-transparent !opacity-0" id="target-right" position={Position.Right} type="target" />
 
-      <div className="flex items-start gap-3">
-        <div
-          className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl text-sm font-semibold text-slate-950"
-          style={{ backgroundColor: accent }}
-        >
-          {node.style?.icon?.slice(0, 2) ?? node.text.trim().slice(0, 2) ?? "•"}
-        </div>
-
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <p className="truncate text-sm font-semibold tracking-wide text-slate-50">
-              {node.text}
-            </p>
-            {isRoot ? (
-              <span className="rounded-full border border-sky-400/30 bg-sky-400/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.2em] text-sky-300">
-                Root
-              </span>
-            ) : null}
-          </div>
-
-          {node.notes ? (
-            <p className="mt-1 line-clamp-2 text-xs leading-5 text-slate-400">{node.notes}</p>
-          ) : (
-            <p className="mt-1 text-xs leading-5 text-slate-500">
-              右クリックで操作 / ダブルクリックで編集
-            </p>
-          )}
-        </div>
-      </div>
-
-      <div className="mt-3 flex items-center gap-2 opacity-0 transition group-hover:opacity-100">
+      {!isRoot ? (
         <button
-          className="rounded-full border border-slate-700 bg-slate-800 px-3 py-1 text-[11px] font-medium text-slate-200 transition hover:border-sky-400/50 hover:text-sky-200"
-          onClick={handleAdd}
-          type="button"
-        >
-          子を追加
-        </button>
-        <button
-          className="rounded-full border border-slate-700 bg-slate-800 px-3 py-1 text-[11px] font-medium text-slate-200 transition hover:border-sky-400/50 hover:text-sky-200"
-          onClick={handleEdit}
-          type="button"
-        >
-          編集
-        </button>
-        <button
-          className="rounded-full border border-rose-500/20 bg-rose-500/10 px-3 py-1 text-[11px] font-medium text-rose-200 transition hover:border-rose-400/40 hover:bg-rose-500/20 disabled:cursor-not-allowed disabled:opacity-40"
-          disabled={isRoot}
+          className="absolute right-3 top-3 flex h-7 w-7 items-center justify-center rounded-full border border-rose-400/30 bg-slate-950/90 text-sm font-semibold text-rose-200 transition hover:border-rose-300/70 hover:bg-rose-500/15 hover:text-rose-100"
           onClick={handleDelete}
           type="button"
         >
-          削除
+          ×
         </button>
+      ) : null}
+
+      {selected ? (
+        <button
+          className="absolute -right-4 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border border-sky-300/60 bg-sky-300 text-xl font-semibold text-slate-950 shadow-[0_12px_30px_rgba(56,189,248,0.35)] transition hover:scale-105 hover:bg-sky-200"
+          onClick={handleAdd}
+          type="button"
+        >
+          +
+        </button>
+      ) : null}
+
+      <div className="flex h-full items-center">
+        {isEditing ? (
+          <input
+            autoFocus
+            className={[
+              "w-full min-w-0 rounded-2xl border border-sky-300/50 bg-slate-950/80 px-3 py-2 font-semibold text-slate-50 outline-none ring-2 ring-sky-300/20",
+              isRoot ? "text-xl tracking-[0.02em]" : "text-base",
+            ].join(" ")}
+            onBlur={saveEdit}
+            onChange={(event) => setEditValue(event.target.value)}
+            onClick={(event) => event.stopPropagation()}
+            onKeyDown={handleInputKeyDown}
+            value={editValue}
+          />
+        ) : (
+          <p
+            className={[
+              "w-full cursor-text break-words font-semibold leading-snug text-slate-50",
+              isRoot ? "text-2xl tracking-[0.01em]" : "text-base",
+            ].join(" ")}
+            onClick={openEditor}
+          >
+            {node.text}
+          </p>
+        )}
       </div>
     </div>
   );

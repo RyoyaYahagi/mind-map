@@ -1,34 +1,32 @@
-import { useEffect, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
 
-import type { Edge, Node } from "@xyflow/react";
+import { applyNodeChanges, type Edge, type Node, type NodeChange } from "@xyflow/react";
 import {
   Background,
   BackgroundVariant,
   Controls,
   ReactFlow,
   ReactFlowProvider,
-  Position,
   useReactFlow,
 } from "@xyflow/react";
-import type { MindMap, MindMapNode } from "@mindmap/core";
+import type { MindMap, NodePosition } from "@mindmap/core";
 
 import { MindMapNode as MindMapNodeView, type MindMapNodeData } from "./MindMapNode.js";
+import { centerNodeAt, getFallbackNodePositions, getNodeDimensions, getNodePosition } from "./nodeLayout.js";
 
 type MindMapCanvasProps = {
   map: MindMap | null;
   selectedNodeId: string | null;
+  editingNodeId: string | null;
   onAddChild: (nodeId: string) => void;
+  onAddRootNode: (position: NodePosition) => void;
   onDeleteNode: (nodeId: string) => void;
-  onEditNode: (nodeId: string) => void;
-  onOpenContextMenu: (node: MindMapNode, position: { x: number; y: number }) => void;
+  onOpenPaneContextMenu: (position: { flowPosition: NodePosition; x: number; y: number }) => void;
+  onRequestEdit: (nodeId: string) => void;
+  onSaveEdit: (nodeId: string, text: string) => void;
+  onSetNodePosition: (nodeId: string, position: NodePosition) => void;
   onSelectNode: (nodeId: string) => void;
 };
-
-const NODE_WIDTH = 260;
-const NODE_HEIGHT = 112;
-const HORIZONTAL_GAP = 48;
-const VERTICAL_GAP = 40;
-const LAYOUT_PADDING = 96;
 
 const nodeTypes = {
   mindMapNode: MindMapNodeView,
@@ -36,117 +34,29 @@ const nodeTypes = {
 
 type MindMapFlowNode = Node<MindMapNodeData, "mindMapNode">;
 
-const measureSubtree = (map: MindMap, nodeId: string, widths: Map<string, number>): number => {
-  const node = map.nodes[nodeId];
-
-  if (!node || node.children.length === 0) {
-    widths.set(nodeId, NODE_WIDTH);
-    return NODE_WIDTH;
-  }
-
-  const childWidths = node.children.map((childId) => measureSubtree(map, childId, widths));
-  const totalWidth =
-    childWidths.reduce((total, width) => total + width, 0) +
-    HORIZONTAL_GAP * Math.max(0, childWidths.length - 1);
-  const width = Math.max(NODE_WIDTH, totalWidth);
-
-  widths.set(nodeId, width);
-  return width;
-};
-
-const layoutMap = (
-  map: MindMap,
-  selectedNodeId: string | null,
-  handlers: Pick<
-    MindMapCanvasProps,
-    "onAddChild" | "onDeleteNode" | "onEditNode" | "onOpenContextMenu" | "onSelectNode"
-  >,
-): {
-  edges: Edge[];
-  nodes: MindMapFlowNode[];
-} => {
-  const root = map.nodes[map.rootId];
-
-  if (!root) {
-    return { edges: [], nodes: [] };
-  }
-
-  const widths = new Map<string, number>();
-  measureSubtree(map, root.id, widths);
-  const nodes: MindMapFlowNode[] = [];
-  const edges: Edge[] = [];
-
-  const placeNode = (nodeId: string, left: number, depth: number): void => {
-    const node = map.nodes[nodeId];
-
-    if (!node) {
-      return;
-    }
-
-    const width = widths.get(nodeId) ?? NODE_WIDTH;
-    const centerX = left + width / 2;
-
-    nodes.push({
-      data: {
-        node,
-        isRoot: nodeId === map.rootId,
-        onAddChild: handlers.onAddChild,
-        onDelete: handlers.onDeleteNode,
-        onEdit: handlers.onEditNode,
-        onOpenContextMenu: (node, event) =>
-          handlers.onOpenContextMenu(node, {
-            x: event.clientX,
-            y: event.clientY,
-          }),
-        onSelect: handlers.onSelectNode,
-      },
-      draggable: false,
-      id: nodeId,
-      position: {
-        x: centerX - NODE_WIDTH / 2 + LAYOUT_PADDING,
-        y: depth * (NODE_HEIGHT + VERTICAL_GAP) + LAYOUT_PADDING,
-      },
-      selected: selectedNodeId === nodeId,
-      sourcePosition: Position.Bottom,
-      targetPosition: Position.Top,
-      type: "mindMapNode",
-    });
-
-    let cursor = left;
-
-    for (const childId of node.children) {
-      const childWidth = widths.get(childId) ?? NODE_WIDTH;
-
-      placeNode(childId, cursor, depth + 1);
-      edges.push({
-        id: `${nodeId}-${childId}`,
-        source: nodeId,
-        target: childId,
-        type: "smoothstep",
-      });
-      cursor += childWidth + HORIZONTAL_GAP;
-    }
-  };
-
-  placeNode(root.id, 0, 0);
-
-  return { edges, nodes };
-};
-
-function ViewportRefitter({ signature }: { signature: string }) {
+function ViewportRefitter({
+  mapId,
+}: {
+  mapId: string | null;
+}) {
   const { fitView } = useReactFlow();
+  const fittedMapIdRef = useRef<string | null>(null);
 
   useEffect(() => {
-    if (!signature) {
+    if (!mapId || fittedMapIdRef.current === mapId) {
       return;
     }
 
-    fitView({
-      duration: 250,
-      includeHiddenNodes: true,
-      padding: 0.22,
+    fittedMapIdRef.current = mapId;
+
+    window.requestAnimationFrame(() => {
+      void fitView({
+        duration: 250,
+        includeHiddenNodes: true,
+        padding: 0.22,
+      });
     });
-  }, [fitView, signature]);
+  }, [fitView, mapId]);
 
   return null;
 }
@@ -154,52 +64,171 @@ function ViewportRefitter({ signature }: { signature: string }) {
 function MindMapCanvasInner({
   map,
   selectedNodeId,
+  editingNodeId,
   onAddChild,
+  onAddRootNode,
   onDeleteNode,
-  onEditNode,
-  onOpenContextMenu,
+  onOpenPaneContextMenu,
+  onRequestEdit,
+  onSaveEdit,
+  onSetNodePosition,
   onSelectNode,
 }: MindMapCanvasProps) {
-  const { edges, nodes } = useMemo(
+  const isDraggingRef = useRef(false);
+  const { screenToFlowPosition } = useReactFlow();
+  const fallbackPositions = useMemo(() => (map ? getFallbackNodePositions(map) : {}), [map]);
+  const layoutNodes = useMemo(
     () =>
       map
-        ? layoutMap(map, selectedNodeId, {
-            onAddChild,
-            onDeleteNode,
-            onEditNode,
-            onOpenContextMenu,
-            onSelectNode,
+        ? Object.values(map.nodes).map((node) => ({
+            data: {
+              editingNodeId,
+              node,
+              isRoot: node.id === map.rootId,
+              onAddChild,
+              onDelete: onDeleteNode,
+              onRequestEdit,
+              onSaveEdit,
+              onSelect: onSelectNode,
+            },
+            draggable: true,
+            id: node.id,
+            position: getNodePosition(map, node.id, fallbackPositions),
+            selected: selectedNodeId === node.id,
+            type: "mindMapNode" as const,
+          }))
+        : [],
+    [
+      editingNodeId,
+      fallbackPositions,
+      map,
+      onAddChild,
+      onDeleteNode,
+      onRequestEdit,
+      onSaveEdit,
+      onSelectNode,
+      selectedNodeId,
+    ],
+  );
+  const edges = useMemo(
+    () =>
+      map
+        ? Object.values(map.nodes).flatMap((node) => {
+            const parentPosition = getNodePosition(map, node.id, fallbackPositions);
+            const parentDimensions = getNodeDimensions(node.id === map.rootId);
+            const parentCenterX = parentPosition.x + parentDimensions.width / 2;
+
+            return node.children.flatMap((childId) => {
+                const child = map.nodes[childId];
+
+                if (!child) {
+                  return [];
+                }
+
+                const childPosition = getNodePosition(map, childId, fallbackPositions);
+                const childDimensions = getNodeDimensions(childId === map.rootId);
+                const childCenterX = childPosition.x + childDimensions.width / 2;
+                const childIsLeft = childCenterX < parentCenterX;
+
+                return [{
+                  id: `${node.id}-${childId}`,
+                  source: node.id,
+                  sourceHandle: childIsLeft ? "source-left" : "source-right",
+                  target: childId,
+                  targetHandle: childIsLeft ? "target-right" : "target-left",
+                  type: "bezier",
+                } satisfies Edge];
+              });
           })
-        : { edges: [], nodes: [] },
-    [map, onAddChild, onDeleteNode, onEditNode, onOpenContextMenu, onSelectNode, selectedNodeId],
+        : [],
+    [fallbackPositions, map],
+  );
+  const [nodesState, setNodesState] = useState<MindMapFlowNode[]>([]);
+
+  useEffect(() => {
+    setNodesState(layoutNodes);
+  }, [layoutNodes]);
+
+  const onNodesChange = useCallback((changes: NodeChange<MindMapFlowNode>[]) => {
+    setNodesState((current) => applyNodeChanges(changes, current) as MindMapFlowNode[]);
+  }, []);
+
+  const handleNodeDragStart = useCallback(() => {
+    isDraggingRef.current = true;
+  }, []);
+
+  const handleNodeDragStop = useCallback(
+    (_event: ReactMouseEvent, draggedNode: MindMapFlowNode) => {
+      isDraggingRef.current = false;
+      onSetNodePosition(draggedNode.id, {
+        x: draggedNode.position.x,
+        y: draggedNode.position.y,
+      });
+    },
+    [onSetNodePosition],
+  );
+
+  const handleCanvasDoubleClick = useCallback(
+    (event: ReactMouseEvent<HTMLDivElement>) => {
+      if (!(event.target instanceof HTMLElement) || !event.target.closest(".react-flow__pane")) {
+        return;
+      }
+
+      const flowPosition = centerNodeAt(
+        screenToFlowPosition({
+          x: event.clientX,
+          y: event.clientY,
+        }),
+        false,
+      );
+
+      onSelectNode("");
+      onAddRootNode(flowPosition);
+    },
+    [onAddRootNode, onSelectNode, screenToFlowPosition],
   );
 
   return (
-    <div className="relative h-full min-h-0 w-full overflow-hidden rounded-3xl border border-slate-800/80 bg-slate-950/70 shadow-[0_30px_80px_rgba(15,23,42,0.35)]">
+    <div
+      className="relative h-full min-h-0 w-full overflow-hidden rounded-3xl border border-slate-800/80 bg-slate-950/70 shadow-[0_30px_80px_rgba(15,23,42,0.35)]"
+      onDoubleClickCapture={handleCanvasDoubleClick}
+    >
       <ReactFlow
         edges={edges}
         fitView
         maxZoom={1.6}
         minZoom={0.25}
-        nodes={nodes}
+        nodes={nodesState}
         nodeTypes={nodeTypes}
         nodesConnectable={false}
-        nodesDraggable={false}
+        nodesDraggable
+        onNodeDragStart={handleNodeDragStart}
+        onNodeDragStop={handleNodeDragStop}
         onNodeClick={(_, node) => onSelectNode(node.id)}
-        onNodeContextMenu={(event, node) => {
+        onPaneClick={() => onSelectNode("")}
+        onPaneContextMenu={(event) => {
           event.preventDefault();
-          onSelectNode(node.id);
-          onOpenContextMenu(node.data.node, {
+          const flowPosition = centerNodeAt(
+            screenToFlowPosition({
+              x: event.clientX,
+              y: event.clientY,
+            }),
+            false,
+          );
+
+          onSelectNode("");
+          onOpenPaneContextMenu({
+            flowPosition,
             x: event.clientX,
             y: event.clientY,
           });
         }}
-        onPaneClick={() => onSelectNode("")}
+        onNodesChange={onNodesChange}
         panOnDrag
         panOnScroll
         proOptions={{ hideAttribution: true }}
       >
-        <ViewportRefitter signature={map?.updatedAt ?? ""} />
+        <ViewportRefitter mapId={map?.id ?? null} />
         <Background color="#334155" gap={20} size={1} variant={BackgroundVariant.Dots} />
         <Controls showInteractive={false} />
       </ReactFlow>
