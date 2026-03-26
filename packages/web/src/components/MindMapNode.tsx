@@ -1,9 +1,11 @@
-import { useEffect, useState, type KeyboardEvent, type MouseEvent } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent, type MouseEvent } from "react";
 
-import { Handle, Position, type Node, type NodeProps } from "@xyflow/react";
+import { Handle, Position, useUpdateNodeInternals, type Node, type NodeProps } from "@xyflow/react";
 import type { MindMapNode } from "@mindmap/core";
+import type { BranchDirection } from "./nodeLayout.js";
 
 export type MindMapNodeData = {
+  branchDirection: BranchDirection;
   node: MindMapNode;
   isRoot: boolean;
   editingNodeId: string | null;
@@ -17,10 +19,12 @@ export type MindMapNodeData = {
 type MindMapFlowNode = Node<MindMapNodeData, "mindMapNode">;
 
 export function MindMapNode({ data, selected }: NodeProps<MindMapFlowNode>) {
-  const { node, isRoot } = data;
+  const { branchDirection, node, isRoot } = data;
   const accent = node.style?.color ?? (isRoot ? "#38bdf8" : "#7dd3fc");
   const [isEditing, setIsEditing] = useState(false);
   const [editValue, setEditValue] = useState(node.text);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const updateNodeInternals = useUpdateNodeInternals();
 
   useEffect(() => {
     setEditValue(node.text);
@@ -34,6 +38,24 @@ export function MindMapNode({ data, selected }: NodeProps<MindMapFlowNode>) {
     setEditValue(node.text);
     setIsEditing(true);
   }, [data.editingNodeId, node.id, node.text]);
+
+  useEffect(() => {
+    if (!isEditing) {
+      return;
+    }
+
+    const frame = window.requestAnimationFrame(() => {
+      inputRef.current?.focus();
+      inputRef.current?.select();
+      updateNodeInternals(node.id);
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [isEditing, node.id, updateNodeInternals]);
+
+  useEffect(() => {
+    updateNodeInternals(node.id);
+  }, [branchDirection, editValue, isEditing, node.id, node.text, selected, updateNodeInternals]);
 
   const openEditor = (event?: MouseEvent<HTMLButtonElement | HTMLDivElement>) => {
     event?.stopPropagation();
@@ -92,18 +114,31 @@ export function MindMapNode({ data, selected }: NodeProps<MindMapFlowNode>) {
     }
   };
 
-  const preventDragStart = (
-    event: MouseEvent<HTMLButtonElement | HTMLInputElement | HTMLParagraphElement>,
-  ) => {
+  const preventButtonDragStart = (event: MouseEvent<HTMLButtonElement>) => {
     event.preventDefault();
     event.stopPropagation();
   };
+
+  const stopPropagation = (
+    event: MouseEvent<HTMLDivElement | HTMLInputElement | HTMLParagraphElement>,
+  ) => {
+    event.stopPropagation();
+  };
+
+  const addButtonPositionClass =
+    branchDirection === "left" ? "-left-4" : "-right-4";
+
+  const cardSizeClass = isRoot
+    ? "min-w-[280px] max-w-[520px] px-7 py-5"
+    : "min-w-[180px] max-w-[360px] px-5 py-3.5";
+
+  const textClass = isRoot ? "text-2xl tracking-[0.01em]" : "text-base";
 
   return (
     <div
       className={[
         "group relative overflow-visible select-none rounded-[28px] border bg-slate-950/92 text-slate-100 shadow-[0_22px_60px_rgba(2,6,23,0.38)] backdrop-blur transition",
-        isRoot ? "min-h-[120px] w-[300px] px-7 py-6" : "min-h-[84px] w-[220px] px-5 py-4",
+        cardSizeClass,
         selected
           ? "border-sky-200/90 ring-4 ring-sky-300/75 shadow-[0_0_0_1px_rgba(186,230,253,0.95),0_26px_60px_rgba(14,165,233,0.24)]"
           : "border-slate-700/80 hover:border-slate-500/80",
@@ -122,7 +157,7 @@ export function MindMapNode({ data, selected }: NodeProps<MindMapFlowNode>) {
         <button
           className="nodrag nopan absolute right-3 top-3 flex h-7 w-7 items-center justify-center rounded-full border border-rose-400/30 bg-slate-950/90 text-sm font-semibold text-rose-200 transition hover:border-rose-300/70 hover:bg-rose-500/15 hover:text-rose-100"
           onClick={handleDelete}
-          onMouseDown={preventDragStart}
+          onMouseDown={preventButtonDragStart}
           type="button"
         >
           ×
@@ -131,38 +166,42 @@ export function MindMapNode({ data, selected }: NodeProps<MindMapFlowNode>) {
 
       {selected ? (
         <button
-          className="nodrag nopan absolute -right-4 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border border-sky-300/60 bg-sky-300 text-xl font-semibold text-slate-950 shadow-[0_12px_30px_rgba(56,189,248,0.35)] transition hover:scale-105 hover:bg-sky-200"
+          className={[
+            "nodrag nopan absolute top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border border-sky-300/60 bg-sky-300 text-xl font-semibold text-slate-950 shadow-[0_12px_30px_rgba(56,189,248,0.35)] transition hover:scale-105 hover:bg-sky-200",
+            addButtonPositionClass,
+          ].join(" ")}
           onClick={handleAdd}
-          onMouseDown={preventDragStart}
+          onMouseDown={preventButtonDragStart}
           type="button"
         >
           +
         </button>
       ) : null}
 
-      <div className="flex h-full items-center">
+      <div className="pr-8">
         {isEditing ? (
           <input
             autoFocus
+            ref={inputRef}
             className={[
               "nodrag nopan w-full min-w-0 rounded-2xl border border-sky-300/50 bg-slate-950/80 px-3 py-2 font-semibold text-slate-50 outline-none ring-2 ring-sky-300/20",
               isRoot ? "text-xl tracking-[0.02em]" : "text-base",
             ].join(" ")}
             onBlur={saveEdit}
             onChange={(event) => setEditValue(event.target.value)}
-            onClick={(event) => event.stopPropagation()}
-            onMouseDown={preventDragStart}
+            onClick={stopPropagation}
+            onMouseDown={stopPropagation}
             onKeyDown={handleInputKeyDown}
             value={editValue}
           />
         ) : (
           <p
             className={[
-              "w-full cursor-text break-words font-semibold leading-snug text-slate-50",
-              isRoot ? "text-2xl tracking-[0.01em]" : "text-base",
+              "nodrag nopan w-full cursor-text break-words font-semibold leading-snug text-slate-50",
+              textClass,
             ].join(" ")}
             onClick={openEditor}
-            onMouseDown={preventDragStart}
+            onMouseDown={stopPropagation}
           >
             {node.text}
           </p>

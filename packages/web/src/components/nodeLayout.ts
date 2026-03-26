@@ -1,5 +1,7 @@
 import type { MindMap, MindMapNode, NodePosition } from "@mindmap/core";
 
+export type BranchDirection = "left" | "right" | "root";
+
 export const NODE_WIDTH = 220;
 export const NODE_HEIGHT = 84;
 export const ROOT_NODE_WIDTH = 300;
@@ -14,6 +16,9 @@ export const getNodeDimensions = (isRoot: boolean): { height: number; width: num
   width: isRoot ? ROOT_NODE_WIDTH : NODE_WIDTH,
 });
 
+const getNodeCenterX = (position: NodePosition, isRoot: boolean): number =>
+  position.x + getNodeDimensions(isRoot).width / 2;
+
 export const centerNodeAt = (position: NodePosition, isRoot: boolean): NodePosition => {
   const { height, width } = getNodeDimensions(isRoot);
 
@@ -23,11 +28,41 @@ export const centerNodeAt = (position: NodePosition, isRoot: boolean): NodePosit
   };
 };
 
-export const getNextChildPosition = (parent: MindMapNode, isRoot: boolean): NodePosition => {
+export const getBranchDirection = (
+  map: MindMap,
+  nodeId: string,
+  fallbackPositions: Record<string, NodePosition>,
+): BranchDirection => {
+  if (nodeId === map.rootId) {
+    return "root";
+  }
+
+  const node = map.nodes[nodeId];
+  const root = map.nodes[map.rootId];
+
+  if (!node || !root) {
+    return "right";
+  }
+
+  const nodePosition = getNodePosition(map, nodeId, fallbackPositions);
+  const rootPosition = getNodePosition(map, map.rootId, fallbackPositions);
+  const nodeCenterX = getNodeCenterX(nodePosition, false);
+  const rootCenterX = getNodeCenterX(rootPosition, true);
+
+  return nodeCenterX < rootCenterX ? "left" : "right";
+};
+
+export const getNextChildPosition = (
+  parent: MindMapNode,
+  branchDirection: BranchDirection,
+  isRoot: boolean,
+): NodePosition => {
   const { width } = getNodeDimensions(isRoot);
+  const horizontalOffset = width + CHILD_OFFSET_X;
+  const direction = branchDirection === "left" ? -1 : 1;
 
   return {
-    x: (parent.position?.x ?? 0) + width + CHILD_OFFSET_X,
+    x: (parent.position?.x ?? 0) + direction * horizontalOffset,
     y: (parent.position?.y ?? 0) + parent.children.length * CHILD_OFFSET_Y,
   };
 };
@@ -70,7 +105,7 @@ export const getFallbackNodePositions = (map: MindMap): Record<string, NodePosit
   measureSubtreeHeight(map, root.id, heights);
   const positions: Record<string, NodePosition> = {};
 
-  const placeNode = (nodeId: string, xCenter: number, yCenter: number, side: "left" | "right" | "root"): void => {
+  const placeNode = (nodeId: string, xCenter: number, yCenter: number, side: BranchDirection): void => {
     const node = map.nodes[nodeId];
 
     if (!node) {

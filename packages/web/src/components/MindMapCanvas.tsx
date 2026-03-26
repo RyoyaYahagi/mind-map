@@ -12,7 +12,7 @@ import {
 import type { MindMap, NodePosition } from "@mindmap/core";
 
 import { MindMapNode as MindMapNodeView, type MindMapNodeData } from "./MindMapNode.js";
-import { centerNodeAt, getFallbackNodePositions, getNodeDimensions, getNodePosition } from "./nodeLayout.js";
+import { centerNodeAt, getBranchDirection, getFallbackNodePositions, getNodeDimensions, getNodePosition } from "./nodeLayout.js";
 
 type MindMapCanvasProps = {
   map: MindMap | null;
@@ -82,6 +82,7 @@ function MindMapCanvasInner({
       map
         ? Object.values(map.nodes).map((node) => ({
             data: {
+              branchDirection: getBranchDirection(map, node.id, fallbackPositions),
               editingNodeId,
               node,
               isRoot: node.id === map.rootId,
@@ -128,7 +129,9 @@ function MindMapCanvasInner({
                 const childPosition = getNodePosition(map, childId, fallbackPositions);
                 const childDimensions = getNodeDimensions(childId === map.rootId);
                 const childCenterX = childPosition.x + childDimensions.width / 2;
-                const childIsLeft = childCenterX < parentCenterX;
+                const childIsLeft =
+                  getBranchDirection(map, childId, fallbackPositions) === "left" ||
+                  childCenterX < parentCenterX;
 
                 return [{
                   id: `${node.id}-${childId}`,
@@ -202,6 +205,7 @@ function MindMapCanvasInner({
         nodeTypes={nodeTypes}
         nodesConnectable={false}
         nodesDraggable
+        zoomOnDoubleClick={false}
         onNodeDragStart={handleNodeDragStart}
         onNodeDragStop={handleNodeDragStop}
         onNodeClick={(_, node) => onSelectNode(node.id)}

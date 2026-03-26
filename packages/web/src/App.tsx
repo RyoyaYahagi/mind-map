@@ -4,7 +4,7 @@ import type { NodePosition } from "@mindmap/core";
 
 import { ContextMenu } from "./components/ContextMenu.js";
 import { MindMapCanvas } from "./components/MindMapCanvas.js";
-import { getFallbackNodePositions, getNextChildPosition } from "./components/nodeLayout.js";
+import { getBranchDirection, getFallbackNodePositions, getNextChildPosition } from "./components/nodeLayout.js";
 import { useMindMap } from "./hooks/useMindMap.js";
 
 const DEFAULT_CHILD_TEXT = "新しいノード";
@@ -137,7 +137,12 @@ export default function App() {
     }
 
     const nextPosition =
-      position ?? getNextChildPosition(parentNode, parentId === map.rootId);
+      position ??
+      getNextChildPosition(
+        parentNode,
+        getBranchDirection(map, parentId, getFallbackNodePositions(map)),
+        parentId === map.rootId,
+      );
 
     setPaneContextMenu(null);
     actions.addNode(parentId, DEFAULT_CHILD_TEXT, nextPosition);
