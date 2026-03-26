@@ -24,14 +24,45 @@ type NodeAddAckMessage = {
   };
 };
 
+export type WorkspaceSummary = {
+  id: string;
+  title: string;
+  filePath: string;
+  createdAt: string;
+  updatedAt: string;
+  nodeCount: number;
+  isActive: boolean;
+};
+
 type SocketMessage = MapUpdateMessage | ErrorMessage | NodeAddAckMessage | { type: string; payload?: unknown };
 
 const SOCKET_URL = import.meta.env.VITE_WS_URL ?? "/ws";
+const MAPS_URL = import.meta.env.VITE_MAPS_URL ?? "/api/maps";
 
 export const useMindMap = () => {
   const [map, setMap] = useState<MindMap | null>(null);
   const [lastAddedNode, setLastAddedNode] = useState<{ nodeId: string; requestId: string } | null>(null);
+  const [workspaces, setWorkspaces] = useState<WorkspaceSummary[]>([]);
   const [serverError, setServerError] = useState<string | null>(null);
+
+  const refreshWorkspaces = useCallback(async () => {
+    try {
+      const response = await fetch(MAPS_URL, {
+        headers: {
+          Accept: "application/json",
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`Workspace list request failed: ${response.status}`);
+      }
+
+      const payload = (await response.json()) as WorkspaceSummary[];
+      setWorkspaces(payload);
+    } catch {
+      // 一覧取得失敗は編集本体を止めない
+    }
+  }, []);
 
   const onMessage = useCallback((raw: string) => {
     try {
@@ -75,7 +106,16 @@ export const useMindMap = () => {
     }
 
     setServerError(null);
-  }, [map]);
+    void refreshWorkspaces();
+  }, [map, refreshWorkspaces]);
+
+  useEffect(() => {
+    if (status !== "open") {
+      return;
+    }
+
+    void refreshWorkspaces();
+  }, [refreshWorkspaces, status]);
 
   const actions = useMemo(
     () => ({
@@ -124,6 +164,13 @@ export const useMindMap = () => {
             position,
           },
         }),
+      openWorkspace: (mapId: string) =>
+        send({
+          type: "map:open",
+          payload: {
+            mapId,
+          },
+        }),
     }),
     [send],
   );
@@ -133,6 +180,8 @@ export const useMindMap = () => {
     error: socketError ?? serverError,
     lastAddedNode,
     map,
+    refreshWorkspaces,
     status,
+    workspaces,
   };
 };

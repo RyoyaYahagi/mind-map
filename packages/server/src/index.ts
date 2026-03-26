@@ -49,6 +49,10 @@ type SetNodePositionBody = {
   position: NodePosition;
 };
 
+type OpenMapBody = {
+  mapId: string;
+};
+
 type MessageEnvelope = {
   type: string;
   payload?: unknown;
@@ -111,6 +115,11 @@ const writeFileAtomically = async (filePath: string, contents: string): Promise<
   await rename(tempPath, filePath);
 };
 
+const writeConfig = async (config: { activeMapId: string | null }): Promise<void> => {
+  await ensureStorage();
+  await writeFileAtomically(CONFIG_PATH, `${JSON.stringify(config, null, 2)}\n`);
+};
+
 const saveMap = async (map: MindMap): Promise<void> => {
   const filePath = getMapFilePath(map.id);
   await writeFileAtomically(filePath, `${toJSON(map)}\n`);
@@ -162,6 +171,10 @@ const loadActiveMap = async (): Promise<MindMap | null> => {
   }
 
   return await loadMap(maps[0].id);
+};
+
+const setActiveMapId = async (mapId: string | null): Promise<void> => {
+  await writeConfig({ activeMapId: mapId });
 };
 
 const assertString = (value: unknown, fieldName: string): string => {
@@ -439,6 +452,17 @@ export const startServer = async (port: number): Promise<FastifyInstance> => {
                   }),
                 );
               }
+              return;
+            }
+
+            if (parsed.type === "map:open") {
+              const payload = parsed.payload as OpenMapBody;
+              const mapId = assertString(payload.mapId, "mapId");
+              const map = await loadMap(mapId);
+
+              await setActiveMapId(map.id);
+              activeMapId = map.id;
+              ws.send(JSON.stringify({ type: "map:update", payload: map }));
               return;
             }
 
