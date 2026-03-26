@@ -92,6 +92,13 @@ export function MindMapNode({ data, selected }: NodeProps<MindMapFlowNode>) {
     }
   };
 
+  const preventDragStart = (
+    event: MouseEvent<HTMLButtonElement | HTMLInputElement | HTMLParagraphElement>,
+  ) => {
+    event.preventDefault();
+    event.stopPropagation();
+  };
+
   return (
     <div
       className={[
@@ -113,8 +120,9 @@ export function MindMapNode({ data, selected }: NodeProps<MindMapFlowNode>) {
 
       {!isRoot ? (
         <button
-          className="absolute right-3 top-3 flex h-7 w-7 items-center justify-center rounded-full border border-rose-400/30 bg-slate-950/90 text-sm font-semibold text-rose-200 transition hover:border-rose-300/70 hover:bg-rose-500/15 hover:text-rose-100"
+          className="nodrag nopan absolute right-3 top-3 flex h-7 w-7 items-center justify-center rounded-full border border-rose-400/30 bg-slate-950/90 text-sm font-semibold text-rose-200 transition hover:border-rose-300/70 hover:bg-rose-500/15 hover:text-rose-100"
           onClick={handleDelete}
+          onMouseDown={preventDragStart}
           type="button"
         >
           ×
@@ -123,8 +131,9 @@ export function MindMapNode({ data, selected }: NodeProps<MindMapFlowNode>) {
 
       {selected ? (
         <button
-          className="absolute -right-4 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border border-sky-300/60 bg-sky-300 text-xl font-semibold text-slate-950 shadow-[0_12px_30px_rgba(56,189,248,0.35)] transition hover:scale-105 hover:bg-sky-200"
+          className="nodrag nopan absolute -right-4 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border border-sky-300/60 bg-sky-300 text-xl font-semibold text-slate-950 shadow-[0_12px_30px_rgba(56,189,248,0.35)] transition hover:scale-105 hover:bg-sky-200"
           onClick={handleAdd}
+          onMouseDown={preventDragStart}
           type="button"
         >
           +
@@ -136,12 +145,13 @@ export function MindMapNode({ data, selected }: NodeProps<MindMapFlowNode>) {
           <input
             autoFocus
             className={[
-              "w-full min-w-0 rounded-2xl border border-sky-300/50 bg-slate-950/80 px-3 py-2 font-semibold text-slate-50 outline-none ring-2 ring-sky-300/20",
+              "nodrag nopan w-full min-w-0 rounded-2xl border border-sky-300/50 bg-slate-950/80 px-3 py-2 font-semibold text-slate-50 outline-none ring-2 ring-sky-300/20",
               isRoot ? "text-xl tracking-[0.02em]" : "text-base",
             ].join(" ")}
             onBlur={saveEdit}
             onChange={(event) => setEditValue(event.target.value)}
             onClick={(event) => event.stopPropagation()}
+            onMouseDown={preventDragStart}
             onKeyDown={handleInputKeyDown}
             value={editValue}
           />
@@ -152,6 +162,7 @@ export function MindMapNode({ data, selected }: NodeProps<MindMapFlowNode>) {
               isRoot ? "text-2xl tracking-[0.01em]" : "text-base",
             ].join(" ")}
             onClick={openEditor}
+            onMouseDown={preventDragStart}
           >
             {node.text}
           </p>
