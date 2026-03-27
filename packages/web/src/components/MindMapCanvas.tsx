@@ -116,7 +116,7 @@ function MindMapCanvasInner({
       map
         ? Object.values(map.nodes).flatMap((node) => {
             const parentPosition = getNodePosition(map, node.id, fallbackPositions);
-            const parentDimensions = getNodeDimensions(node.id === map.rootId);
+            const parentDimensions = getNodeDimensions(node.id === map.rootId, node.text);
             const parentCenterX = parentPosition.x + parentDimensions.width / 2;
 
             return node.children.flatMap((childId) => {
@@ -127,7 +127,7 @@ function MindMapCanvasInner({
                 }
 
                 const childPosition = getNodePosition(map, childId, fallbackPositions);
-                const childDimensions = getNodeDimensions(childId === map.rootId);
+                const childDimensions = getNodeDimensions(childId === map.rootId, child.text);
                 const childCenterX = childPosition.x + childDimensions.width / 2;
                 const childIsLeft =
                   getBranchDirection(map, childId, fallbackPositions) === "left" ||

@@ -3,6 +3,7 @@ import { useEffect, useRef, useState, type KeyboardEvent, type MouseEvent } from
 import { Handle, Position, useUpdateNodeInternals, type Node, type NodeProps } from "@xyflow/react";
 import type { MindMapNode } from "@mindmap/core";
 import type { BranchDirection } from "./nodeLayout.js";
+import { getNodeDimensions } from "./nodeLayout.js";
 
 export type MindMapNodeData = {
   branchDirection: BranchDirection;
@@ -137,9 +138,10 @@ export function MindMapNode({ data, selected }: NodeProps<MindMapFlowNode>) {
     : "";
   const deleteButtonPositionClass =
     branchDirection === "right" ? "left-3 top-3" : "right-3 top-3";
+  const rootNodeWidth = isRoot ? getNodeDimensions(true, node.text).width : undefined;
 
   const cardSizeClass = isRoot
-    ? "min-w-[280px] max-w-[520px] px-7 py-5"
+    ? "px-7 py-5"
     : "min-w-[180px] max-w-[360px] px-5 py-3.5";
 
   const textClass = isRoot ? "text-2xl tracking-[0.01em]" : "text-base";
@@ -156,7 +158,10 @@ export function MindMapNode({ data, selected }: NodeProps<MindMapFlowNode>) {
       onClick={handleSelect}
       role="button"
       tabIndex={0}
-      style={{ boxShadow: `0 0 0 1px ${accent}33, 0 24px 60px rgba(2, 6, 23, 0.35)` }}
+      style={{
+        boxShadow: `0 0 0 1px ${accent}33, 0 24px 60px rgba(2, 6, 23, 0.35)`,
+        width: rootNodeWidth,
+      }}
     >
       <Handle className="!h-2 !w-2 !border-0 !bg-transparent !opacity-0" id="source-left" position={Position.Left} type="source" />
       <Handle className="!h-2 !w-2 !border-0 !bg-transparent !opacity-0" id="source-right" position={Position.Right} type="source" />

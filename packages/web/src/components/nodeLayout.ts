@@ -6,21 +6,66 @@ export const NODE_WIDTH = 220;
 export const NODE_HEIGHT = 84;
 export const ROOT_NODE_WIDTH = 300;
 export const ROOT_NODE_HEIGHT = 120;
+export const ROOT_NODE_MIN_WIDTH = 220;
+export const ROOT_NODE_MAX_WIDTH = 520;
 const LEVEL_GAP = 280;
 const SIBLING_GAP = 24;
 const CHILD_OFFSET_X = 72;
 const CHILD_OFFSET_Y = 96;
+const ROOT_NODE_HORIZONTAL_PADDING = 96;
+const ROOT_NODE_FONT = "600 24px ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, sans-serif";
+const ROOT_NODE_LETTER_SPACING_PX = 0.24;
 
-export const getNodeDimensions = (isRoot: boolean): { height: number; width: number } => ({
+let textMeasureContext: CanvasRenderingContext2D | null | undefined;
+
+const clamp = (value: number, min: number, max: number): number =>
+  Math.min(Math.max(value, min), max);
+
+const getTextMeasureContext = (): CanvasRenderingContext2D | null => {
+  if (textMeasureContext !== undefined) {
+    return textMeasureContext;
+  }
+
+  if (typeof document === "undefined") {
+    textMeasureContext = null;
+    return textMeasureContext;
+  }
+
+  const canvas = document.createElement("canvas");
+  textMeasureContext = canvas.getContext("2d");
+  return textMeasureContext;
+};
+
+export const getRootNodeWidth = (text: string): number => {
+  const context = getTextMeasureContext();
+
+  if (!context) {
+    return ROOT_NODE_WIDTH;
+  }
+
+  context.font = ROOT_NODE_FONT;
+  const normalizedText = text.trim() || " ";
+  const textWidth =
+    context.measureText(normalizedText).width +
+    Math.max(normalizedText.length - 1, 0) * ROOT_NODE_LETTER_SPACING_PX;
+
+  return clamp(
+    Math.ceil(textWidth + ROOT_NODE_HORIZONTAL_PADDING),
+    ROOT_NODE_MIN_WIDTH,
+    ROOT_NODE_MAX_WIDTH,
+  );
+};
+
+export const getNodeDimensions = (isRoot: boolean, text: string = ""): { height: number; width: number } => ({
   height: isRoot ? ROOT_NODE_HEIGHT : NODE_HEIGHT,
-  width: isRoot ? ROOT_NODE_WIDTH : NODE_WIDTH,
+  width: isRoot ? getRootNodeWidth(text) : NODE_WIDTH,
 });
 
-const getNodeCenterX = (position: NodePosition, isRoot: boolean): number =>
-  position.x + getNodeDimensions(isRoot).width / 2;
+const getNodeCenterX = (position: NodePosition, isRoot: boolean, text: string = ""): number =>
+  position.x + getNodeDimensions(isRoot, text).width / 2;
 
-export const centerNodeAt = (position: NodePosition, isRoot: boolean): NodePosition => {
-  const { height, width } = getNodeDimensions(isRoot);
+export const centerNodeAt = (position: NodePosition, isRoot: boolean, text: string = ""): NodePosition => {
+  const { height, width } = getNodeDimensions(isRoot, text);
 
   return {
     x: position.x - width / 2,
@@ -46,8 +91,8 @@ export const getBranchDirection = (
 
   const nodePosition = getNodePosition(map, nodeId, fallbackPositions);
   const rootPosition = getNodePosition(map, map.rootId, fallbackPositions);
-  const nodeCenterX = getNodeCenterX(nodePosition, false);
-  const rootCenterX = getNodeCenterX(rootPosition, true);
+  const nodeCenterX = getNodeCenterX(nodePosition, false, node.text);
+  const rootCenterX = getNodeCenterX(rootPosition, true, root.text);
 
   return nodeCenterX < rootCenterX ? "left" : "right";
 };
@@ -57,7 +102,7 @@ export const getNextChildPosition = (
   branchDirection: BranchDirection,
   isRoot: boolean,
 ): NodePosition => {
-  const { width } = getNodeDimensions(isRoot);
+  const { width } = getNodeDimensions(isRoot, parent.text);
   const horizontalOffset = width + CHILD_OFFSET_X;
   const direction = branchDirection === "left" ? -1 : 1;
 
@@ -74,7 +119,7 @@ const measureSubtreeHeight = (map: MindMap, nodeId: string, heights: Map<string,
     return NODE_HEIGHT;
   }
 
-  const nodeHeight = getNodeDimensions(nodeId === map.rootId).height;
+  const nodeHeight = getNodeDimensions(nodeId === map.rootId, node.text).height;
 
   if (node.children.length === 0) {
     heights.set(nodeId, nodeHeight);
@@ -112,10 +157,10 @@ export const getFallbackNodePositions = (map: MindMap): Record<string, NodePosit
       return;
     }
 
-    const { height, width } = getNodeDimensions(nodeId === map.rootId);
+    const nodeDimensions = getNodeDimensions(nodeId === map.rootId, node.text);
     positions[nodeId] = {
-      x: xCenter - width / 2,
-      y: yCenter - height / 2,
+      x: xCenter - nodeDimensions.width / 2,
+      y: yCenter - nodeDimensions.height / 2,
     };
 
     if (node.children.length === 0) {
@@ -159,7 +204,7 @@ export const getFallbackNodePositions = (map: MindMap): Record<string, NodePosit
     placeChildren(children.left, "left");
   };
 
-  placeNode(root.id, ROOT_NODE_WIDTH / 2, ROOT_NODE_HEIGHT / 2, "root");
+  placeNode(root.id, getRootNodeWidth(root.text) / 2, ROOT_NODE_HEIGHT / 2, "root");
 
   return positions;
 };
