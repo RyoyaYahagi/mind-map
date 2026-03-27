@@ -142,7 +142,11 @@ export default function App() {
     queueMicrotask(() => setEditingNodeId(nodeId));
   };
 
-  const createNode = (parentId: string, position?: NodePosition) => {
+  const createNode = (
+    parentId: string,
+    position?: NodePosition,
+    preferredDirection?: "left" | "right",
+  ) => {
     const parentNode = map?.nodes[parentId];
 
     if (!map || !parentNode) {
@@ -153,12 +157,43 @@ export default function App() {
       position ??
       getNextChildPosition(
         parentNode,
-        getBranchDirection(map, parentId, getFallbackNodePositions(map)),
+        preferredDirection ??
+          getBranchDirection(map, parentId, getFallbackNodePositions(map)),
         parentId === map.rootId,
       );
 
     setPaneContextMenu(null);
     actions.addNode(parentId, DEFAULT_CHILD_TEXT, nextPosition);
+  };
+
+  const handleCreateWorkspace = async () => {
+    const title = window.prompt("新しいワークスペース名を入力してください", "新しいワークスペース");
+
+    if (title === null) {
+      return;
+    }
+
+    const normalizedTitle = title.trim();
+
+    try {
+      const createdWorkspace = await actions.createWorkspace(normalizedTitle);
+      setPaneContextMenu(null);
+      setEditingNodeId(null);
+      setSelectedNodeId(null);
+      setIsWorkspaceMenuOpen(false);
+      const opened = actions.openWorkspace(createdWorkspace.id);
+      await refreshWorkspaces();
+
+      if (!opened) {
+        window.alert("ワークスペースは作成されましたが、接続待ちのため自動では開けませんでした。接続回復後に一覧から選択してください。");
+      }
+    } catch (workspaceError) {
+      const message =
+        workspaceError instanceof Error
+          ? workspaceError.message
+          : "ワークスペースの作成に失敗しました";
+      window.alert(message);
+    }
   };
 
   const handleSaveEdit = (nodeId: string, text: string) => {
@@ -291,6 +326,19 @@ export default function App() {
                         </span>
                       </button>
                     ))}
+
+                    <button
+                      className="rounded-2xl border border-dashed border-slate-600/80 bg-slate-900/50 px-3 py-3 text-left text-slate-200 transition hover:border-sky-300/60 hover:bg-slate-900 hover:text-slate-50"
+                      onClick={() => {
+                        void handleCreateWorkspace();
+                      }}
+                      type="button"
+                    >
+                      <span className="block text-sm font-semibold">新規ワークスペースを追加</span>
+                      <span className="mt-1 block text-xs text-slate-400">
+                        新しいマップを作成して開きます
+                      </span>
+                    </button>
                   </div>
                 </div>
               ) : null}
@@ -333,7 +381,7 @@ export default function App() {
         <MindMapCanvas
           editingNodeId={editingNodeId}
           map={map}
-          onAddChild={(nodeId) => createNode(nodeId)}
+          onAddChild={(nodeId, preferredDirection) => createNode(nodeId, undefined, preferredDirection)}
           onAddRootNode={(position) => createNode(map?.rootId ?? "", position)}
           onDeleteNode={deleteNode}
           onOpenPaneContextMenu={({ flowPosition, x, y }) =>

@@ -38,6 +38,7 @@ type SocketMessage = MapUpdateMessage | ErrorMessage | NodeAddAckMessage | { typ
 
 const SOCKET_URL = import.meta.env.VITE_WS_URL ?? "/ws";
 const MAPS_URL = import.meta.env.VITE_MAPS_URL ?? "/api/maps";
+const DEFAULT_WORKSPACE_TITLE = "新しいワークスペース";
 
 export const useMindMap = () => {
   const [map, setMap] = useState<MindMap | null>(null);
@@ -171,6 +172,24 @@ export const useMindMap = () => {
             mapId,
           },
         }),
+      createWorkspace: async (title?: string) => {
+        const response = await fetch(MAPS_URL, {
+          body: JSON.stringify({
+            title: title?.trim() || DEFAULT_WORKSPACE_TITLE,
+          }),
+          headers: {
+            Accept: "application/json",
+            "Content-Type": "application/json",
+          },
+          method: "POST",
+        });
+
+        if (!response.ok) {
+          throw new Error(`Workspace create request failed: ${response.status}`);
+        }
+
+        return (await response.json()) as WorkspaceSummary;
+      },
     }),
     [send],
   );

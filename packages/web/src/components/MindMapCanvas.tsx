@@ -18,7 +18,7 @@ type MindMapCanvasProps = {
   map: MindMap | null;
   selectedNodeId: string | null;
   editingNodeId: string | null;
-  onAddChild: (nodeId: string) => void;
+  onAddChild: (nodeId: string, preferredDirection?: "left" | "right") => void;
   onAddRootNode: (position: NodePosition) => void;
   onDeleteNode: (nodeId: string) => void;
   onOpenPaneContextMenu: (position: { flowPosition: NodePosition; x: number; y: number }) => void;
@@ -173,7 +173,20 @@ function MindMapCanvasInner({
 
   const handleCanvasDoubleClick = useCallback(
     (event: ReactMouseEvent<HTMLDivElement>) => {
-      if (!(event.target instanceof HTMLElement) || !event.target.closest(".react-flow__pane")) {
+      if (!(event.target instanceof Element)) {
+        return;
+      }
+
+      const target = event.target;
+
+      if (target.closest(".react-flow__node, .react-flow__edge, .react-flow__controls")) {
+        return;
+      }
+
+      if (
+        !target.closest(".react-flow__pane") &&
+        !target.closest(".react-flow__background")
+      ) {
         return;
       }
 

@@ -9,7 +9,7 @@ export type MindMapNodeData = {
   node: MindMapNode;
   isRoot: boolean;
   editingNodeId: string | null;
-  onAddChild: (nodeId: string) => void;
+  onAddChild: (nodeId: string, preferredDirection?: "left" | "right") => void;
   onDelete: (nodeId: string) => void;
   onRequestEdit: (nodeId: string) => void;
   onSaveEdit: (nodeId: string, text: string) => void;
@@ -85,9 +85,12 @@ export function MindMapNode({ data, selected }: NodeProps<MindMapFlowNode>) {
     setIsEditing(false);
   };
 
-  const handleAdd = (event: MouseEvent<HTMLButtonElement>) => {
+  const handleAdd = (
+    event: MouseEvent<HTMLButtonElement>,
+    preferredDirection?: "left" | "right",
+  ) => {
     event.stopPropagation();
-    data.onAddChild(node.id);
+    data.onAddChild(node.id, preferredDirection);
   };
 
   const handleDelete = (event: MouseEvent<HTMLButtonElement>) => {
@@ -127,6 +130,13 @@ export function MindMapNode({ data, selected }: NodeProps<MindMapFlowNode>) {
 
   const addButtonPositionClass =
     branchDirection === "left" ? "-left-4" : "-right-4";
+  const contentPaddingClass = !isRoot
+    ? branchDirection === "right"
+      ? "pl-8"
+      : "pr-8"
+    : "";
+  const deleteButtonPositionClass =
+    branchDirection === "right" ? "left-3 top-3" : "right-3 top-3";
 
   const cardSizeClass = isRoot
     ? "min-w-[280px] max-w-[520px] px-7 py-5"
@@ -155,7 +165,10 @@ export function MindMapNode({ data, selected }: NodeProps<MindMapFlowNode>) {
 
       {!isRoot ? (
         <button
-          className="nodrag nopan absolute right-3 top-3 flex h-7 w-7 items-center justify-center rounded-full border border-rose-400/30 bg-slate-950/90 text-sm font-semibold text-rose-200 transition hover:border-rose-300/70 hover:bg-rose-500/15 hover:text-rose-100"
+          className={[
+            "nodrag nopan absolute flex h-7 w-7 items-center justify-center rounded-full border border-rose-400/30 bg-slate-950/90 text-sm font-semibold text-rose-200 transition hover:border-rose-300/70 hover:bg-rose-500/15 hover:text-rose-100",
+            deleteButtonPositionClass,
+          ].join(" ")}
           onClick={handleDelete}
           onMouseDown={preventButtonDragStart}
           type="button"
@@ -165,20 +178,43 @@ export function MindMapNode({ data, selected }: NodeProps<MindMapFlowNode>) {
       ) : null}
 
       {selected ? (
-        <button
-          className={[
-            "nodrag nopan absolute top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border border-sky-300/60 bg-sky-300 text-xl font-semibold text-slate-950 shadow-[0_12px_30px_rgba(56,189,248,0.35)] transition hover:scale-105 hover:bg-sky-200",
-            addButtonPositionClass,
-          ].join(" ")}
-          onClick={handleAdd}
-          onMouseDown={preventButtonDragStart}
-          type="button"
-        >
-          +
-        </button>
+        <>
+          {isRoot ? (
+            <>
+              <button
+                className="nodrag nopan absolute -left-4 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border border-sky-300/60 bg-sky-300 text-xl font-semibold text-slate-950 shadow-[0_12px_30px_rgba(56,189,248,0.35)] transition hover:scale-105 hover:bg-sky-200"
+                onClick={(event) => handleAdd(event, "left")}
+                onMouseDown={preventButtonDragStart}
+                type="button"
+              >
+                +
+              </button>
+              <button
+                className="nodrag nopan absolute -right-4 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border border-sky-300/60 bg-sky-300 text-xl font-semibold text-slate-950 shadow-[0_12px_30px_rgba(56,189,248,0.35)] transition hover:scale-105 hover:bg-sky-200"
+                onClick={(event) => handleAdd(event, "right")}
+                onMouseDown={preventButtonDragStart}
+                type="button"
+              >
+                +
+              </button>
+            </>
+          ) : (
+            <button
+              className={[
+                "nodrag nopan absolute top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border border-sky-300/60 bg-sky-300 text-xl font-semibold text-slate-950 shadow-[0_12px_30px_rgba(56,189,248,0.35)] transition hover:scale-105 hover:bg-sky-200",
+                addButtonPositionClass,
+              ].join(" ")}
+              onClick={(event) => handleAdd(event)}
+              onMouseDown={preventButtonDragStart}
+              type="button"
+            >
+              +
+            </button>
+          )}
+        </>
       ) : null}
 
-      <div className="pr-8">
+      <div className={contentPaddingClass}>
         {isEditing ? (
           <input
             autoFocus

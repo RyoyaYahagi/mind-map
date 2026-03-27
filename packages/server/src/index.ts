@@ -1,5 +1,5 @@
 import type { MindMap, NodePosition } from "@mindmap/core";
-import { addNode, deleteNode, editNode, fromJSON, moveNode, setNodePosition, toJSON } from "@mindmap/core";
+import { addNode, createMindMap, deleteNode, editNode, fromJSON, moveNode, setNodePosition, toJSON } from "@mindmap/core";
 import { readFile, readdir, writeFile, mkdir, access, rename } from "node:fs/promises";
 import { basename, join, dirname } from "node:path";
 import { homedir } from "node:os";
@@ -51,6 +51,10 @@ type SetNodePositionBody = {
 
 type OpenMapBody = {
   mapId: string;
+};
+
+type CreateMapBody = {
+  title: string;
 };
 
 type MessageEnvelope = {
@@ -330,6 +334,28 @@ export const startServer = async (port: number): Promise<FastifyInstance> => {
   });
 
   fastify.get("/api/maps", async () => listMaps());
+
+  fastify.post<{ Body: CreateMapBody }>("/api/maps", async (request, reply) => {
+    try {
+      const title = assertString(request.body?.title, "title");
+      const map = createMindMap(title);
+
+      await saveMap(map);
+
+      return {
+        id: map.id,
+        title: map.title,
+        filePath: getMapFilePath(map.id),
+        createdAt: map.createdAt,
+        updatedAt: map.updatedAt,
+        nodeCount: Object.keys(map.nodes).length,
+        isActive: false,
+      } satisfies MapSummary;
+    } catch (error) {
+      reply.code(400);
+      return respondWithError(error);
+    }
+  });
 
   fastify.get<{ Params: MapParams }>("/api/maps/:id", async (request, reply) => {
     try {
