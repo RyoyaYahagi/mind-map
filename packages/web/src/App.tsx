@@ -293,9 +293,9 @@ export default function App() {
               </button>
 
               {isWorkspaceMenuOpen ? (
-                <div className="absolute left-0 top-[calc(100%+0.75rem)] z-30 w-72 rounded-3xl border border-slate-700/80 bg-slate-950/95 p-2 shadow-[0_30px_80px_rgba(2,6,23,0.45)] backdrop-blur">
+                <div className="absolute left-0 top-[calc(100%+0.75rem)] z-30 w-72 rounded-3xl border border-slate-600/80 bg-slate-950 p-2 shadow-[0_30px_80px_rgba(2,6,23,0.55)] backdrop-blur">
                   <div className="px-3 py-2">
-                    <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-slate-500">
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-slate-300">
                       ワークスペース一覧
                     </p>
                   </div>
@@ -306,8 +306,8 @@ export default function App() {
                         className={[
                           "rounded-2xl border px-3 py-3 text-left transition",
                           workspace.isActive
-                            ? "border-sky-300/30 bg-sky-400/10 text-sky-100"
-                            : "border-transparent bg-slate-900/70 text-slate-200 hover:border-slate-700/80 hover:bg-slate-900 hover:text-slate-50",
+                            ? "border-sky-300/40 bg-sky-400/12 text-sky-50"
+                            : "border-transparent bg-slate-900/80 text-slate-100 hover:border-slate-600/80 hover:bg-slate-900 hover:text-slate-50",
                         ].join(" ")}
                         disabled={workspace.isActive}
                         key={workspace.id}
@@ -321,21 +321,21 @@ export default function App() {
                         type="button"
                       >
                         <span className="block truncate text-sm font-semibold">{workspace.title}</span>
-                        <span className="mt-1 block text-xs text-slate-400">
+                        <span className="mt-1 block text-xs text-slate-300">
                           {workspace.nodeCount} nodes
                         </span>
                       </button>
                     ))}
 
                     <button
-                      className="rounded-2xl border border-dashed border-slate-600/80 bg-slate-900/50 px-3 py-3 text-left text-slate-200 transition hover:border-sky-300/60 hover:bg-slate-900 hover:text-slate-50"
+                      className="rounded-2xl border border-dashed border-slate-500/80 bg-slate-900/80 px-3 py-3 text-left text-slate-50 transition hover:border-sky-300/70 hover:bg-slate-900 hover:text-white"
                       onClick={() => {
                         void handleCreateWorkspace();
                       }}
                       type="button"
                     >
                       <span className="block text-sm font-semibold">新規ワークスペースを追加</span>
-                      <span className="mt-1 block text-xs text-slate-400">
+                      <span className="mt-1 block text-xs text-slate-300">
                         新しいマップを作成して開きます
                       </span>
                     </button>
