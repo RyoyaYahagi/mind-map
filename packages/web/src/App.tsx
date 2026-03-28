@@ -190,6 +190,17 @@ export default function App() {
     }
   };
 
+  const createDetachedRootNode = (position?: NodePosition) => {
+    setPaneContextMenu(null);
+    const requestId = actions.addDetachedNode(DEFAULT_CHILD_TEXT, position);
+
+    void refreshWorkspaces();
+
+    if (!requestId) {
+      return;
+    }
+  };
+
   const handleCreateWorkspace = async () => {
     const normalizedTitle = newWorkspaceTitle.trim();
 
@@ -480,7 +491,7 @@ export default function App() {
       <ContextMenu
         onAddRootNode={() => {
           if (paneContextMenu) {
-            createNode(map?.rootId ?? "", paneContextMenu.flowPosition);
+            createDetachedRootNode(paneContextMenu.flowPosition);
           }
         }}
         onClose={() => setPaneContextMenu(null)}

@@ -1,4 +1,5 @@
 import {
+  addDetachedNode,
   addNode,
   createMindMap,
   deleteNode,
@@ -282,6 +283,23 @@ export const addNodeToActiveMap = (
     };
   }, targetMap.id);
 };
+
+export const addDetachedNodeToActiveMap = (
+  store: WorkspaceStore,
+  text: string,
+  position?: NodePosition,
+  mapId?: string,
+): ActiveMapMutationResult<{ nodeId: string }> | null =>
+  updateMap(store, (map) => {
+    const result = addDetachedNode(map, text, position);
+
+    return {
+      map: result.map,
+      value: {
+        nodeId: result.node.id,
+      },
+    };
+  }, mapId);
 
 export const editNodeInActiveMap = (
   store: WorkspaceStore,

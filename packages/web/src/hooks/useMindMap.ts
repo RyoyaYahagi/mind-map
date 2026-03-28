@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { MindMap, NodePosition } from "@mindmap/core";
 
 import {
+  addDetachedNodeToActiveMap,
   addNodeToActiveMap,
   createWorkspace,
   deleteNodeFromActiveMap,
@@ -119,6 +120,32 @@ export const useMindMap = () => {
         const targetMapId = map?.id;
         const added = applyStoreChange((store) => {
           const result = addNodeToActiveMap(store, parentId, text, position, targetMapId);
+
+          if (!result) {
+            return null;
+          }
+
+          return {
+            store: result.store,
+            value: {
+              nodeId: result.value.nodeId,
+              requestId,
+            },
+          };
+        });
+
+        if (!added) {
+          return null;
+        }
+
+        setLastAddedNode(added);
+        return added.requestId;
+      },
+      addDetachedNode: (text: string, position?: NodePosition) => {
+        const requestId = crypto.randomUUID();
+        const targetMapId = map?.id;
+        const added = applyStoreChange((store) => {
+          const result = addDetachedNodeToActiveMap(store, text, position, targetMapId);
 
           if (!result) {
             return null;

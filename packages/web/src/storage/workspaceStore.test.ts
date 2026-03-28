@@ -4,6 +4,7 @@ import { createMindMap } from "@mindmap/core";
 
 import {
   WORKSPACE_STORAGE_KEY,
+  addDetachedNodeToActiveMap,
   addNodeToActiveMap,
   createWorkspace,
   ensureWorkspaceStore,
@@ -89,6 +90,22 @@ describe("workspaceStore", () => {
     const activeMap = getActiveMap(moved!.store);
 
     expect(activeMap?.nodes[added!.value.nodeId]?.position).toEqual({ x: 480, y: 240 });
+  });
+
+  it("adds detached top-level nodes to the active workspace", () => {
+    const initialMap = createMindMap("Root");
+    const initialStore: WorkspaceStore = {
+      activeMapId: initialMap.id,
+      maps: {
+        [initialMap.id]: initialMap,
+      },
+    };
+
+    const added = addDetachedNodeToActiveMap(initialStore, "Detached", { x: 720, y: 360 });
+
+    expect(added).not.toBeNull();
+    expect(added!.store.maps[initialMap.id]?.nodes[added!.value.nodeId]?.parent).toBeNull();
+    expect(added!.store.maps[initialMap.id]?.nodes[added!.value.nodeId]?.position).toEqual({ x: 720, y: 360 });
   });
 
   it("saves notes for the selected node and preserves them after persistence", () => {
