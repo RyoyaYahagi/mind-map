@@ -183,13 +183,6 @@ function MindMapCanvasInner({
         return;
       }
 
-      if (
-        !target.closest(".react-flow__pane") &&
-        !target.closest(".react-flow__background")
-      ) {
-        return;
-      }
-
       const flowPosition = centerNodeAt(
         screenToFlowPosition({
           x: event.clientX,

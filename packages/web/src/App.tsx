@@ -172,7 +172,15 @@ export default function App() {
         : undefined);
 
     setPaneContextMenu(null);
-    actions.addNode(parentId, DEFAULT_CHILD_TEXT, nextPosition);
+    const requestId = actions.addNode(parentId, DEFAULT_CHILD_TEXT, nextPosition);
+
+    // localStorage-backed state is cheap to re-read, and this keeps the canvas in sync
+    // even if ReactFlow/UI state briefly lags behind the write.
+    void refreshWorkspaces();
+
+    if (!requestId) {
+      return;
+    }
   };
 
   const handleCreateWorkspace = async () => {
