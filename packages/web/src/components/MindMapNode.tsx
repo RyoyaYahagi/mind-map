@@ -226,7 +226,7 @@ export function MindMapNode({ data, selected }: NodeProps<MindMapFlowNode>) {
             ref={inputRef}
             className={[
               "nodrag nopan w-full min-w-0 rounded-2xl border border-sky-300/50 bg-slate-950/80 px-3 py-2 font-semibold text-slate-50 outline-none ring-2 ring-sky-300/20",
-              isRoot ? "text-xl tracking-[0.02em]" : "text-base",
+              textClass,
             ].join(" ")}
             onBlur={saveEdit}
             onChange={(event) => setEditValue(event.target.value)}
