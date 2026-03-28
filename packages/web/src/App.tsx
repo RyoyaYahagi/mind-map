@@ -42,6 +42,10 @@ export default function App() {
   const [isCreatingWorkspace, setIsCreatingWorkspace] = useState(false);
   const [newWorkspaceTitle, setNewWorkspaceTitle] = useState(DEFAULT_WORKSPACE_TITLE);
   const workspaceMenuRef = useRef<HTMLDivElement | null>(null);
+  const closeWorkspaceMenu = () => {
+    setIsCreatingWorkspace(false);
+    setIsWorkspaceMenuOpen(false);
+  };
 
   const selectedNode = useMemo(() => {
     if (!map || !selectedNodeId) {
@@ -177,8 +181,7 @@ export default function App() {
       setPaneContextMenu(null);
       setEditingNodeId(null);
       setSelectedNodeId(null);
-      setIsCreatingWorkspace(false);
-      setIsWorkspaceMenuOpen(false);
+      closeWorkspaceMenu();
       setNewWorkspaceTitle(DEFAULT_WORKSPACE_TITLE);
       const opened = actions.openWorkspace(createdWorkspace.id);
       await refreshWorkspaces();
@@ -232,8 +235,7 @@ export default function App() {
       if (event.key === "Escape") {
         setPaneContextMenu(null);
         setEditingNodeId(null);
-        setIsCreatingWorkspace(false);
-        setIsWorkspaceMenuOpen(false);
+        closeWorkspaceMenu();
       }
     };
 
@@ -244,8 +246,7 @@ export default function App() {
   useEffect(() => {
     const onMouseDown = (event: MouseEvent) => {
       if (!workspaceMenuRef.current?.contains(event.target as Node)) {
-        setIsCreatingWorkspace(false);
-        setIsWorkspaceMenuOpen(false);
+        closeWorkspaceMenu();
       }
     };
 
@@ -265,7 +266,14 @@ export default function App() {
       : null);
 
   return (
-    <div className="relative flex h-full min-h-0 flex-col overflow-hidden text-slate-100">
+    <div
+      className="relative flex h-full min-h-0 flex-col overflow-hidden text-slate-100"
+      onMouseDownCapture={(event) => {
+        if (!workspaceMenuRef.current?.contains(event.target as Node)) {
+          closeWorkspaceMenu();
+        }
+      }}
+    >
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(56,189,248,0.12),transparent_30%),radial-gradient(circle_at_bottom_right,rgba(15,23,42,0.6),transparent_35%)]" />
 
       <header className="relative z-20 flex items-center justify-between gap-4 border-b border-slate-800/70 bg-slate-950/55 px-5 py-4 backdrop-blur">
@@ -317,10 +325,9 @@ export default function App() {
                         onClick={() => {
                           setPaneContextMenu(null);
                           setEditingNodeId(null);
-                          setIsCreatingWorkspace(false);
+                          closeWorkspaceMenu();
                           setSelectedNodeId(null);
                           actions.openWorkspace(workspace.id);
-                          setIsWorkspaceMenuOpen(false);
                         }}
                         type="button"
                       >
@@ -438,6 +445,7 @@ export default function App() {
           onSaveEdit={handleSaveEdit}
           onSelectNode={(nodeId) => {
             setPaneContextMenu(null);
+            closeWorkspaceMenu();
             setSelectedNodeId(nodeId || null);
           }}
           onSetNodePosition={(nodeId, position) => actions.setNodePosition(nodeId, position)}
