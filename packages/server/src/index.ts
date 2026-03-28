@@ -130,6 +130,11 @@ const saveMap = async (map: MindMap): Promise<void> => {
   await writeFileAtomically(filePath, `${toJSON(map)}\n`);
 };
 
+const saveMapLocally = async (map: MindMap): Promise<void> => {
+  markLocalWrite(map.id);
+  await saveMap(map);
+};
+
 const listMapIds = async (): Promise<string[]> => {
   await ensureStorage();
   const entries = await readdir(MAPS_DIR, { withFileTypes: true });
@@ -265,7 +270,7 @@ const handleMapChange = async (mapId: string): Promise<void> => {
 
   try {
     const map = await loadMap(mapId);
-    broadcast({ type: "map:update", payload: map });
+    broadcast({ type: "map:update", payload: map }, map.id);
   } catch {
     // 破損ファイルは監視対象外として扱い、配信だけ止める
   }
@@ -281,9 +286,8 @@ const updateMapAndPersist = async (mapId: string, updater: (map: MindMap) => Min
 };
 
 const saveMapAndBroadcast = async (nextMap: MindMap): Promise<void> => {
-  await saveMap(nextMap);
-  markLocalWrite(nextMap.id);
-  broadcast({ type: "map:update", payload: nextMap });
+  await saveMapLocally(nextMap);
+  broadcast({ type: "map:update", payload: nextMap }, nextMap.id);
 };
 
 const findWebDistDir = async (): Promise<string | null> => {
@@ -357,14 +361,16 @@ export const startServer = async (port: number): Promise<FastifyInstance> => {
       const merged = mergeImportedBridgePayload(currentMaps, config.activeMapId, request.body);
 
       for (const map of Object.values(merged.maps)) {
-        await saveMap(map);
-        markLocalWrite(map.id);
+        await saveMapLocally(map);
       }
 
       await setActiveMapId(merged.activeMapId);
 
       if (merged.activeMapId && merged.maps[merged.activeMapId]) {
-        broadcast({ type: "map:update", payload: merged.maps[merged.activeMapId] });
+        broadcast(
+          { type: "map:update", payload: merged.maps[merged.activeMapId] },
+          merged.activeMapId,
+        );
       }
 
       return {
@@ -384,7 +390,7 @@ export const startServer = async (port: number): Promise<FastifyInstance> => {
       const title = assertString(request.body?.title, "title");
       const map = createMindMap(title);
 
-      await saveMap(map);
+      await saveMapLocally(map);
 
       return {
         id: map.id,
@@ -475,8 +481,8 @@ export const startServer = async (port: number): Promise<FastifyInstance> => {
     }
 
     wss.handleUpgrade(request, socket, head, (ws) => {
-      addClient(ws);
       let activeMapId: string | null = null;
+      addClient(ws, () => activeMapId);
 
       ws.on("close", () => {
         removeClient(ws);
