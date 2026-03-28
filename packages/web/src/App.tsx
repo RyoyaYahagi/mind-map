@@ -156,20 +156,20 @@ export default function App() {
     position?: NodePosition,
     preferredDirection?: "left" | "right",
   ) => {
-    const parentNode = map?.nodes[parentId];
-
-    if (!map || !parentNode) {
+    if (!parentId) {
       return;
     }
 
     const nextPosition =
       position ??
-      getNextChildPosition(
-        parentNode,
-        preferredDirection ??
-          getBranchDirection(map, parentId, getFallbackNodePositions(map)),
-        parentId === map.rootId,
-      );
+      (map?.nodes[parentId]
+        ? getNextChildPosition(
+            map.nodes[parentId],
+            preferredDirection ??
+              getBranchDirection(map, parentId, getFallbackNodePositions(map)),
+            parentId === map.rootId,
+          )
+        : undefined);
 
     setPaneContextMenu(null);
     actions.addNode(parentId, DEFAULT_CHILD_TEXT, nextPosition);
