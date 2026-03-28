@@ -8,6 +8,7 @@ import Fastify, { type FastifyInstance } from "fastify";
 import fastifyStatic from "@fastify/static";
 import { WebSocketServer, type WebSocket } from "ws";
 
+import { buildBridgePayload, mergeImportedBridgePayload } from "./bridge.js";
 import { addClient, broadcast, removeClient } from "./ws.js";
 import { watchMaps } from "./watcher.js";
 
@@ -159,6 +160,13 @@ const listMaps = async (): Promise<MapSummary[]> => {
   );
 
   return maps.sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
+};
+
+const loadMapsRecord = async (): Promise<Record<string, MindMap>> => {
+  const mapIds = await listMapIds();
+  const maps = await Promise.all(mapIds.map((mapId) => loadMap(mapId)));
+
+  return Object.fromEntries(maps.map((map) => [map.id, map]));
 };
 
 const loadActiveMap = async (): Promise<MindMap | null> => {
@@ -334,6 +342,42 @@ export const startServer = async (port: number): Promise<FastifyInstance> => {
   });
 
   fastify.get("/api/maps", async () => listMaps());
+
+  fastify.get("/api/bridge/workspaces", async () => {
+    const config = await readConfig();
+    const maps = await loadMapsRecord();
+
+    return buildBridgePayload(maps, config.activeMapId);
+  });
+
+  fastify.post<{ Body: unknown }>("/api/bridge/workspaces", async (request, reply) => {
+    try {
+      const config = await readConfig();
+      const currentMaps = await loadMapsRecord();
+      const merged = mergeImportedBridgePayload(currentMaps, config.activeMapId, request.body);
+
+      for (const map of Object.values(merged.maps)) {
+        await saveMap(map);
+        markLocalWrite(map.id);
+      }
+
+      await setActiveMapId(merged.activeMapId);
+
+      if (merged.activeMapId && merged.maps[merged.activeMapId]) {
+        broadcast({ type: "map:update", payload: merged.maps[merged.activeMapId] });
+      }
+
+      return {
+        ok: true,
+        activeMapId: merged.activeMapId,
+        importedMapCount: merged.importedMapCount,
+        totalMapCount: Object.keys(merged.maps).length,
+      };
+    } catch (error) {
+      reply.code(400);
+      return respondWithError(error);
+    }
+  });
 
   fastify.post<{ Body: CreateMapBody }>("/api/maps", async (request, reply) => {
     try {

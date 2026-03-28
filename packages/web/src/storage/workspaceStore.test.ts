@@ -8,12 +8,15 @@ import {
   addNodeToActiveMap,
   createWorkspace,
   ensureWorkspaceStore,
+  fromBridgePayload,
   getActiveMap,
   listWorkspaceSummaries,
+  mergeWorkspaceStores,
   openWorkspace,
   readWorkspaceStore,
   saveNodeNotesInActiveMap,
   setNodePositionInActiveMap,
+  toBridgePayload,
   writeWorkspaceStore,
   type WorkspaceStore,
 } from "./workspaceStore.js";
@@ -60,6 +63,18 @@ describe("workspaceStore", () => {
     expect(restored.activeMapId).toBe(created.map.id);
     expect(getActiveMap(restored)?.title).toBe("公開用マップ");
     expect(listWorkspaceSummaries(restored)).toHaveLength(2);
+  });
+
+  it("serializes and restores bridge payloads", () => {
+    const storage = new MemoryStorage();
+    const initialStore = ensureWorkspaceStore(storage);
+    const created = createWorkspace(initialStore, "公開用マップ");
+    const payload = toBridgePayload(created.store);
+    const restored = fromBridgePayload(payload);
+
+    expect(payload.version).toBe(1);
+    expect(restored.activeMapId).toBe(created.store.activeMapId);
+    expect(getActiveMap(restored)?.title).toBe("公開用マップ");
   });
 
   it("falls back to a default workspace when stored data is invalid", () => {
@@ -131,6 +146,17 @@ describe("workspaceStore", () => {
 
     expect(reopened.map?.id).toBe(firstStore.activeMapId);
     expect(reopened.store.activeMapId).toBe(firstStore.activeMapId);
+  });
+
+  it("merges imported workspaces and prefers the incoming active map", () => {
+    const storage = new MemoryStorage();
+    const localStore = ensureWorkspaceStore(storage);
+    const imported = createWorkspace(readWorkspaceStore(new MemoryStorage()), "CLI Map");
+
+    const merged = mergeWorkspaceStores(localStore, imported.store);
+
+    expect(listWorkspaceSummaries(merged)).toHaveLength(3);
+    expect(getActiveMap(merged)?.title).toBe("CLI Map");
   });
 
   it("ignores stale map-targeted updates after workspace switches", () => {

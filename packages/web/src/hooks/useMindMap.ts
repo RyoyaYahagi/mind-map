@@ -9,13 +9,15 @@ import {
   deleteNodeFromActiveMap,
   editNodeInActiveMap,
   ensureWorkspaceStore,
+  fromBridgePayload,
   getActiveMap,
   listWorkspaceSummaries,
+  mergeWorkspaceStores,
   moveNodeInActiveMap,
   openWorkspace,
-  readWorkspaceStore,
   saveNodeNotesInActiveMap,
   setNodePositionInActiveMap,
+  toBridgePayload,
   writeWorkspaceStore,
   WORKSPACE_STORAGE_KEY,
   type WorkspaceStore,
@@ -25,6 +27,16 @@ import {
 export type { WorkspaceSummary } from "../storage/workspaceStore.js";
 
 export type MindMapStatus = "open" | "local" | "error";
+export type BridgeSyncStatus = "idle" | "importing" | "exporting";
+
+const readApiError = async (response: Response): Promise<string> => {
+  try {
+    const payload = await response.json() as { error?: string; message?: string };
+    return payload.error ?? payload.message ?? `リクエストに失敗しました (${response.status})`;
+  } catch {
+    return `リクエストに失敗しました (${response.status})`;
+  }
+};
 
 export const useMindMap = () => {
   const [map, setMap] = useState<MindMap | null>(null);
@@ -32,6 +44,9 @@ export const useMindMap = () => {
   const [workspaces, setWorkspaces] = useState<WorkspaceSummary[]>([]);
   const [status, setStatus] = useState<MindMapStatus>("local");
   const [serverError, setServerError] = useState<string | null>(null);
+  const [bridgeStatus, setBridgeStatus] = useState<BridgeSyncStatus>("idle");
+  const [bridgeMessage, setBridgeMessage] = useState<string | null>(null);
+  const [bridgeError, setBridgeError] = useState<string | null>(null);
 
   const getStorage = useCallback((): Storage | null => {
     if (typeof window === "undefined") {
@@ -257,12 +272,87 @@ export const useMindMap = () => {
 
         return created;
       },
+      importFromCliBridge: async () => {
+        try {
+          setBridgeStatus("importing");
+          setBridgeError(null);
+          setBridgeMessage(null);
+
+          const storage = getStorage();
+
+          if (!storage) {
+            throw new Error("ブラウザのストレージへアクセスできません");
+          }
+
+          const response = await fetch("/api/bridge/workspaces");
+
+          if (!response.ok) {
+            throw new Error(await readApiError(response));
+          }
+
+          const payload = await response.json();
+          const importedStore = fromBridgePayload(payload);
+          const currentStore = ensureWorkspaceStore(storage);
+          const mergedStore = mergeWorkspaceStores(currentStore, importedStore);
+          const nextStore = writeWorkspaceStore(storage, mergedStore);
+
+          syncFromStore(nextStore);
+          setBridgeMessage(`CLI保存領域から ${Object.keys(importedStore.maps).length} 件のワークスペースを取り込みました`);
+        } catch (error) {
+          setBridgeError(
+            error instanceof Error ? error.message : "CLI保存領域からの取り込みに失敗しました",
+          );
+        } finally {
+          setBridgeStatus("idle");
+        }
+      },
+      exportToCliBridge: async () => {
+        try {
+          setBridgeStatus("exporting");
+          setBridgeError(null);
+          setBridgeMessage(null);
+
+          const storage = getStorage();
+
+          if (!storage) {
+            throw new Error("ブラウザのストレージへアクセスできません");
+          }
+
+          const store = ensureWorkspaceStore(storage);
+          const response = await fetch("/api/bridge/workspaces", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify(toBridgePayload(store)),
+          });
+
+          if (!response.ok) {
+            throw new Error(await readApiError(response));
+          }
+
+          const result = await response.json() as { importedMapCount?: number };
+          const exportedCount = result.importedMapCount ?? Object.keys(store.maps).length;
+          setBridgeMessage(`ブラウザの ${exportedCount} 件のワークスペースをCLI保存領域へ書き出しました`);
+        } catch (error) {
+          setBridgeError(
+            error instanceof Error ? error.message : "CLI保存領域への書き出しに失敗しました",
+          );
+        } finally {
+          setBridgeStatus("idle");
+        }
+      },
     }),
-    [applyStoreChange, map?.id],
+    [applyStoreChange, getStorage, map?.id, syncFromStore],
   );
 
   return {
     actions,
+    bridge: {
+      error: bridgeError,
+      message: bridgeMessage,
+      status: bridgeStatus,
+    },
     error: serverError,
     lastAddedNode,
     map,

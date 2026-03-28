@@ -2,15 +2,16 @@ import {
   addDetachedNode,
   addNode,
   createMindMap,
+  deserializeWorkspaceBridgePayload,
   deleteNode,
   editNode,
-  fromJSON,
   moveNode,
+  serializeWorkspaceBridgePayload,
   setNote,
   setNodePosition,
-  toJSON,
   type MindMap,
   type NodePosition,
+  type WorkspaceBridgePayload,
 } from "@mindmap/core";
 
 export type WorkspaceSummary = {
@@ -28,11 +29,7 @@ export type WorkspaceStore = {
   maps: Record<string, MindMap>;
 };
 
-type PersistedWorkspaceStore = {
-  version: 1;
-  activeMapId: string | null;
-  maps: Record<string, string>;
-};
+type PersistedWorkspaceStore = WorkspaceBridgePayload;
 
 type StorageLike = Pick<Storage, "getItem" | "setItem">;
 
@@ -81,40 +78,14 @@ const parseStore = (raw: string | null): WorkspaceStore | null => {
   }
 
   try {
-    const parsed = JSON.parse(raw) as Partial<PersistedWorkspaceStore>;
-
-    if (parsed.version !== 1 || !parsed.maps || typeof parsed.maps !== "object") {
-      return null;
-    }
-
-    const maps = Object.entries(parsed.maps).reduce<Record<string, MindMap>>((result, [mapId, serialized]) => {
-      if (typeof serialized !== "string") {
-        return result;
-      }
-
-      const map = fromJSON(serialized);
-
-      result[mapId] = map;
-      return result;
-    }, {});
-
-    return normalizeStore({
-      activeMapId: typeof parsed.activeMapId === "string" ? parsed.activeMapId : null,
-      maps,
-    });
+    return normalizeStore(deserializeWorkspaceBridgePayload(JSON.parse(raw)));
   } catch {
     return null;
   }
 };
 
 const persistStore = (storage: StorageLike, store: WorkspaceStore): void => {
-  const payload: PersistedWorkspaceStore = {
-    version: 1,
-    activeMapId: store.activeMapId,
-    maps: Object.fromEntries(
-      Object.entries(store.maps).map(([mapId, map]) => [mapId, toJSON(map)]),
-    ),
-  };
+  const payload: PersistedWorkspaceStore = serializeWorkspaceBridgePayload(store);
 
   storage.setItem(WORKSPACE_STORAGE_KEY, JSON.stringify(payload));
 };
@@ -191,6 +162,24 @@ export const ensureWorkspaceStore = (storage: StorageLike): WorkspaceStore => {
 
   return writeWorkspaceStore(storage, createDefaultStore());
 };
+
+export const toBridgePayload = (store: WorkspaceStore): WorkspaceBridgePayload =>
+  serializeWorkspaceBridgePayload(store);
+
+export const fromBridgePayload = (payload: unknown): WorkspaceStore =>
+  normalizeStore(deserializeWorkspaceBridgePayload(payload));
+
+export const mergeWorkspaceStores = (
+  current: WorkspaceStore,
+  incoming: WorkspaceStore,
+): WorkspaceStore =>
+  normalizeStore({
+    activeMapId: incoming.activeMapId ?? current.activeMapId,
+    maps: {
+      ...current.maps,
+      ...incoming.maps,
+    },
+  });
 
 export const listWorkspaceSummaries = (store: WorkspaceStore): WorkspaceSummary[] =>
   sortMaps(store.maps).map((map) => createWorkspaceSummary(map, store.activeMapId));
