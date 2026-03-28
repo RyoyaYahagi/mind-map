@@ -2,201 +2,200 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import type { MindMap, NodePosition } from "@mindmap/core";
 
-import { useWebSocket } from "./useWebSocket.js";
+import {
+  addNodeToActiveMap,
+  createWorkspace,
+  deleteNodeFromActiveMap,
+  editNodeInActiveMap,
+  getActiveMap,
+  listWorkspaceSummaries,
+  moveNodeInActiveMap,
+  openWorkspace,
+  readWorkspaceStore,
+  setNodePositionInActiveMap,
+  writeWorkspaceStore,
+  WORKSPACE_STORAGE_KEY,
+  type WorkspaceStore,
+  type WorkspaceSummary,
+} from "../storage/workspaceStore.js";
 
-type MapUpdateMessage = {
-  type: "map:update";
-  payload: MindMap;
-};
+export type { WorkspaceSummary } from "../storage/workspaceStore.js";
 
-type ErrorMessage = {
-  type: "error";
-  payload: {
-    error?: string;
-  };
-};
-
-type NodeAddAckMessage = {
-  type: "node:add:ack";
-  payload: {
-    nodeId: string;
-    requestId: string;
-  };
-};
-
-export type WorkspaceSummary = {
-  id: string;
-  title: string;
-  filePath: string;
-  createdAt: string;
-  updatedAt: string;
-  nodeCount: number;
-  isActive: boolean;
-};
-
-type SocketMessage = MapUpdateMessage | ErrorMessage | NodeAddAckMessage | { type: string; payload?: unknown };
-
-const SOCKET_URL = import.meta.env.VITE_WS_URL ?? "/ws";
-const MAPS_URL = import.meta.env.VITE_MAPS_URL ?? "/api/maps";
-const DEFAULT_WORKSPACE_TITLE = "新しいワークスペース";
+export type MindMapStatus = "open" | "local" | "error";
 
 export const useMindMap = () => {
   const [map, setMap] = useState<MindMap | null>(null);
   const [lastAddedNode, setLastAddedNode] = useState<{ nodeId: string; requestId: string } | null>(null);
   const [workspaces, setWorkspaces] = useState<WorkspaceSummary[]>([]);
+  const [status, setStatus] = useState<MindMapStatus>("local");
   const [serverError, setServerError] = useState<string | null>(null);
+
+  const getStorage = useCallback((): Storage | null => {
+    if (typeof window === "undefined") {
+      return null;
+    }
+
+    return window.localStorage;
+  }, []);
+
+  const syncFromStore = useCallback((store: WorkspaceStore) => {
+    setMap(getActiveMap(store));
+    setWorkspaces(listWorkspaceSummaries(store));
+    setStatus("local");
+    setServerError(null);
+  }, []);
 
   const refreshWorkspaces = useCallback(async () => {
     try {
-      const response = await fetch(MAPS_URL, {
-        headers: {
-          Accept: "application/json",
-        },
-      });
+      const storage = getStorage();
 
-      if (!response.ok) {
-        throw new Error(`Workspace list request failed: ${response.status}`);
+      if (!storage) {
+        throw new Error("ブラウザのストレージへアクセスできません");
       }
 
-      const payload = (await response.json()) as WorkspaceSummary[];
-      setWorkspaces(payload);
-    } catch {
-      // 一覧取得失敗は編集本体を止めない
+      const store = readWorkspaceStore(storage);
+      syncFromStore(store);
+    } catch (error) {
+      setStatus("error");
+      setServerError(error instanceof Error ? error.message : "ワークスペースの読み込みに失敗しました");
     }
-  }, []);
+  }, [getStorage, syncFromStore]);
 
-  const onMessage = useCallback((raw: string) => {
+  useEffect(() => {
+    void refreshWorkspaces();
+  }, [refreshWorkspaces]);
+
+  useEffect(() => {
+    const onStorage = (event: StorageEvent) => {
+      if (event.storageArea !== window.localStorage) {
+        return;
+      }
+
+      if (event.key !== null && event.key !== WORKSPACE_STORAGE_KEY) {
+        return;
+      }
+
+      void refreshWorkspaces();
+    };
+
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, [refreshWorkspaces]);
+
+  const applyStoreChange = <T,>(
+    mutate: (store: WorkspaceStore) => { store: WorkspaceStore; value: T },
+  ): T | null => {
     try {
-      const message = JSON.parse(raw) as SocketMessage;
+      const storage = getStorage();
 
-      if (message.type === "map:update") {
-        setMap(message.payload as MindMap);
-        setServerError(null);
-        return;
+      if (!storage) {
+        throw new Error("ブラウザのストレージへアクセスできません");
       }
 
-      if (message.type === "error") {
-        const payload = message.payload as { error?: string } | undefined;
-        setServerError(payload?.error ?? "サーバーからエラーが返されました");
-        return;
-      }
+      const store = readWorkspaceStore(storage);
+      const result = mutate(store);
+      const nextStore = writeWorkspaceStore(storage, result.store);
 
-      if (message.type === "node:add:ack") {
-        const payload = message.payload as NodeAddAckMessage["payload"] | undefined;
-
-        if (payload?.nodeId && payload.requestId) {
-          setLastAddedNode({
-            nodeId: payload.nodeId,
-            requestId: payload.requestId,
-          });
-        }
-      }
-    } catch {
-      setServerError("WebSocket メッセージの解析に失敗しました");
+      syncFromStore(nextStore);
+      return result.value;
+    } catch (error) {
+      setStatus("error");
+      setServerError(error instanceof Error ? error.message : "ワークスペースの更新に失敗しました");
+      return null;
     }
-  }, []);
-
-  const { error: socketError, send, status } = useWebSocket({
-    url: SOCKET_URL,
-    onMessage,
-  });
-
-  useEffect(() => {
-    if (!map) {
-      return;
-    }
-
-    setServerError(null);
-    void refreshWorkspaces();
-  }, [map, refreshWorkspaces]);
-
-  useEffect(() => {
-    if (status !== "open") {
-      return;
-    }
-
-    void refreshWorkspaces();
-  }, [refreshWorkspaces, status]);
+  };
 
   const actions = useMemo(
     () => ({
       addNode: (parentId: string, text: string, position?: NodePosition) => {
         const requestId = crypto.randomUUID();
-        const ok = send({
-          type: "node:add",
-          payload: {
-            parentId,
-            position,
-            requestId,
-            text,
-          },
+        const added = applyStoreChange((store) => {
+          const result = addNodeToActiveMap(store, parentId, text, position);
+
+          return {
+            store: result.store,
+            value: {
+              nodeId: result.value.nodeId,
+              requestId,
+            },
+          };
         });
 
-        return ok ? requestId : null;
-      },
-      deleteNode: (nodeId: string) =>
-        send({
-          type: "node:delete",
-          payload: {
-            nodeId,
-          },
-        }),
-      editNode: (nodeId: string, text: string) =>
-        send({
-          type: "node:edit",
-          payload: {
-            nodeId,
-            text,
-          },
-        }),
-      moveNode: (nodeId: string, newParentId: string) =>
-        send({
-          type: "node:move",
-          payload: {
-            newParentId,
-            nodeId,
-          },
-        }),
-      setNodePosition: (nodeId: string, position: NodePosition) =>
-        send({
-          type: "node:position",
-          payload: {
-            nodeId,
-            position,
-          },
-        }),
-      openWorkspace: (mapId: string) =>
-        send({
-          type: "map:open",
-          payload: {
-            mapId,
-          },
-        }),
-      createWorkspace: async (title?: string) => {
-        const response = await fetch(MAPS_URL, {
-          body: JSON.stringify({
-            title: title?.trim() || DEFAULT_WORKSPACE_TITLE,
-          }),
-          headers: {
-            Accept: "application/json",
-            "Content-Type": "application/json",
-          },
-          method: "POST",
-        });
-
-        if (!response.ok) {
-          throw new Error(`Workspace create request failed: ${response.status}`);
+        if (!added) {
+          return null;
         }
 
-        return (await response.json()) as WorkspaceSummary;
+        setLastAddedNode(added);
+        return added.requestId;
+      },
+      deleteNode: (nodeId: string) =>
+        applyStoreChange((store) => {
+          const result = deleteNodeFromActiveMap(store, nodeId);
+
+          return {
+            store: result.store,
+            value: result.value,
+          };
+        }) ?? false,
+      editNode: (nodeId: string, text: string) =>
+        applyStoreChange((store) => {
+          const result = editNodeInActiveMap(store, nodeId, text);
+
+          return {
+            store: result.store,
+            value: result.value,
+          };
+        }) ?? false,
+      moveNode: (nodeId: string, newParentId: string) =>
+        applyStoreChange((store) => {
+          const result = moveNodeInActiveMap(store, nodeId, newParentId);
+
+          return {
+            store: result.store,
+            value: result.value,
+          };
+        }) ?? false,
+      setNodePosition: (nodeId: string, position: NodePosition) =>
+        applyStoreChange((store) => {
+          const result = setNodePositionInActiveMap(store, nodeId, position);
+
+          return {
+            store: result.store,
+            value: result.value,
+          };
+        }) ?? false,
+      openWorkspace: (mapId: string) =>
+        applyStoreChange((store) => {
+          const result = openWorkspace(store, mapId);
+
+          return {
+            store: result.store,
+            value: result.map !== null,
+          };
+        }) ?? false,
+      createWorkspace: async (title?: string) => {
+        const created = applyStoreChange((store) => {
+          const result = createWorkspace(store, title);
+
+          return {
+            store: result.store,
+            value: result.summary,
+          };
+        });
+
+        if (!created) {
+          throw new Error("ワークスペースの作成に失敗しました");
+        }
+
+        return created;
       },
     }),
-    [send],
+    [applyStoreChange],
   );
 
   return {
     actions,
-    error: socketError ?? serverError,
+    error: serverError,
     lastAddedNode,
     map,
     refreshWorkspaces,

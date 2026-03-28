@@ -14,6 +14,8 @@ function statusLabel(status: string): string {
   switch (status) {
     case "open":
       return "接続済み";
+    case "local":
+      return "ローカル保存";
     case "connecting":
       return "接続中";
     case "closed":
@@ -411,7 +413,7 @@ export default function App() {
           <span
             className={[
               "rounded-full border px-3 py-1 text-xs font-medium",
-              status === "open"
+              status === "open" || status === "local"
                 ? "border-emerald-400/20 bg-emerald-400/10 text-emerald-200"
                 : status === "error"
                   ? "border-rose-400/20 bg-rose-400/10 text-rose-200"
