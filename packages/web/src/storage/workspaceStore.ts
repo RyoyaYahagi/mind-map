@@ -136,6 +136,14 @@ const getActiveMapOrThrow = (store: WorkspaceStore): MindMap => {
   return activeMap;
 };
 
+const getTargetMap = (store: WorkspaceStore, mapId?: string): MindMap | null => {
+  if (mapId) {
+    return store.maps[mapId] ?? null;
+  }
+
+  return getActiveMap(store);
+};
+
 const createWorkspaceSummary = (map: MindMap, activeMapId: string | null): WorkspaceSummary => ({
   id: map.id,
   title: map.title,
@@ -202,11 +210,17 @@ export const openWorkspace = (
   };
 };
 
-export const updateActiveMap = <T>(
+export const updateMap = <T>(
   store: WorkspaceStore,
   mutate: (map: MindMap) => { map: MindMap; value: T },
-): ActiveMapMutationResult<T> => {
-  const currentMap = getActiveMapOrThrow(store);
+  mapId?: string,
+): ActiveMapMutationResult<T> | null => {
+  const currentMap = getTargetMap(store, mapId);
+
+  if (!currentMap) {
+    return null;
+  }
+
   const result = mutate(currentMap);
 
   return {
@@ -221,8 +235,9 @@ export const addNodeToActiveMap = (
   parentId: string,
   text: string,
   position?: NodePosition,
-): ActiveMapMutationResult<{ nodeId: string }> =>
-  updateActiveMap(store, (map) => {
+  mapId?: string,
+): ActiveMapMutationResult<{ nodeId: string }> | null =>
+  updateMap(store, (map) => {
     const result = addNode(map, parentId, text, position);
 
     return {
@@ -231,43 +246,47 @@ export const addNodeToActiveMap = (
         nodeId: result.node.id,
       },
     };
-  });
+  }, mapId);
 
 export const editNodeInActiveMap = (
   store: WorkspaceStore,
   nodeId: string,
   text: string,
-): ActiveMapMutationResult<boolean> =>
-  updateActiveMap(store, (map) => ({
+  mapId?: string,
+): ActiveMapMutationResult<boolean> | null =>
+  updateMap(store, (map) => ({
     map: editNode(map, nodeId, text),
     value: true,
-  }));
+  }), mapId);
 
 export const deleteNodeFromActiveMap = (
   store: WorkspaceStore,
   nodeId: string,
-): ActiveMapMutationResult<boolean> =>
-  updateActiveMap(store, (map) => ({
+  mapId?: string,
+): ActiveMapMutationResult<boolean> | null =>
+  updateMap(store, (map) => ({
     map: deleteNode(map, nodeId),
     value: true,
-  }));
+  }), mapId);
 
 export const moveNodeInActiveMap = (
   store: WorkspaceStore,
   nodeId: string,
   newParentId: string,
-): ActiveMapMutationResult<boolean> =>
-  updateActiveMap(store, (map) => ({
+  mapId?: string,
+): ActiveMapMutationResult<boolean> | null =>
+  updateMap(store, (map) => ({
     map: moveNode(map, nodeId, newParentId),
     value: true,
-  }));
+  }), mapId);
 
 export const setNodePositionInActiveMap = (
   store: WorkspaceStore,
   nodeId: string,
   position: NodePosition,
-): ActiveMapMutationResult<boolean> =>
-  updateActiveMap(store, (map) => ({
+  mapId?: string,
+): ActiveMapMutationResult<boolean> | null =>
+  updateMap(store, (map) => ({
     map: setNodePosition(map, nodeId, position),
     value: true,
-  }));
+  }), mapId);

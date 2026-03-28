@@ -70,10 +70,14 @@ describe("workspaceStore", () => {
     };
 
     const added = addNodeToActiveMap(initialStore, initialMap.rootId, "Child", { x: 280, y: 120 });
-    const moved = setNodePositionInActiveMap(added.store, added.value.nodeId, { x: 480, y: 240 });
-    const activeMap = getActiveMap(moved.store);
+    expect(added).not.toBeNull();
 
-    expect(activeMap?.nodes[added.value.nodeId]?.position).toEqual({ x: 480, y: 240 });
+    const moved = setNodePositionInActiveMap(added!.store, added!.value.nodeId, { x: 480, y: 240 });
+    expect(moved).not.toBeNull();
+
+    const activeMap = getActiveMap(moved!.store);
+
+    expect(activeMap?.nodes[added!.value.nodeId]?.position).toEqual({ x: 480, y: 240 });
   });
 
   it("opens an existing workspace by id", () => {
@@ -84,5 +88,14 @@ describe("workspaceStore", () => {
 
     expect(reopened.map?.id).toBe(firstStore.activeMapId);
     expect(reopened.store.activeMapId).toBe(firstStore.activeMapId);
+  });
+
+  it("ignores stale map-targeted updates after workspace switches", () => {
+    const initial = readWorkspaceStore(new MemoryStorage());
+    const created = createWorkspace(initial, "Second");
+
+    const staleUpdate = addNodeToActiveMap(created.store, created.map.rootId, "Child", undefined, "missing-map-id");
+
+    expect(staleUpdate).toBeNull();
   });
 });
