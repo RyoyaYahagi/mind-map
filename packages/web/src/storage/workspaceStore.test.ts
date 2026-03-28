@@ -92,9 +92,20 @@ describe("workspaceStore", () => {
 
   it("ignores stale map-targeted updates after workspace switches", () => {
     const initial = readWorkspaceStore(new MemoryStorage());
+    const firstMapId = initial.activeMapId ?? "";
     const created = createWorkspace(initial, "Second");
 
-    const staleUpdate = addNodeToActiveMap(created.store, created.map.rootId, "Child", undefined, "missing-map-id");
+    const staleUpdate = addNodeToActiveMap(created.store, created.map.rootId, "Child", undefined, firstMapId);
+
+    expect(staleUpdate).not.toBeNull();
+    expect(staleUpdate?.map.id).toBe(created.map.id);
+    expect(staleUpdate?.map.nodes[staleUpdate.value.nodeId]?.parent).toBe(created.map.rootId);
+  });
+
+  it("returns null when no workspace contains the target node", () => {
+    const initial = readWorkspaceStore(new MemoryStorage());
+
+    const staleUpdate = addNodeToActiveMap(initial, "missing-node-id", "Child", undefined, "missing-map-id");
 
     expect(staleUpdate).toBeNull();
   });
