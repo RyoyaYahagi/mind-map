@@ -1,6 +1,6 @@
 import type { MindMap, NodePosition } from "@mindmap/core";
-import { addNode, deleteNode, editNode, fromJSON, moveNode, setNodePosition, toJSON } from "@mindmap/core";
-import { readFile, readdir, writeFile, mkdir, access } from "node:fs/promises";
+import { addNode, createMindMap, deleteNode, editNode, fromJSON, moveNode, setNodePosition, toJSON } from "@mindmap/core";
+import { readFile, readdir, writeFile, mkdir, access, rename } from "node:fs/promises";
 import { basename, join, dirname } from "node:path";
 import { homedir } from "node:os";
 import { fileURLToPath } from "node:url";
@@ -8,6 +8,7 @@ import Fastify, { type FastifyInstance } from "fastify";
 import fastifyStatic from "@fastify/static";
 import { WebSocketServer, type WebSocket } from "ws";
 
+import { buildBridgePayload, mergeImportedBridgePayload } from "./bridge.js";
 import { addClient, broadcast, removeClient } from "./ws.js";
 import { watchMaps } from "./watcher.js";
 
@@ -47,6 +48,14 @@ type MoveNodeBody = {
 
 type SetNodePositionBody = {
   position: NodePosition;
+};
+
+type OpenMapBody = {
+  mapId: string;
+};
+
+type CreateMapBody = {
+  title: string;
 };
 
 type MessageEnvelope = {
@@ -105,9 +114,25 @@ const loadMap = async (mapId: string): Promise<MindMap> => {
   return fromJSON(raw);
 };
 
+const writeFileAtomically = async (filePath: string, contents: string): Promise<void> => {
+  const tempPath = `${filePath}.${process.pid}.${Date.now()}.tmp`;
+  await writeFile(tempPath, contents, "utf8");
+  await rename(tempPath, filePath);
+};
+
+const writeConfig = async (config: { activeMapId: string | null }): Promise<void> => {
+  await ensureStorage();
+  await writeFileAtomically(CONFIG_PATH, `${JSON.stringify(config, null, 2)}\n`);
+};
+
 const saveMap = async (map: MindMap): Promise<void> => {
   const filePath = getMapFilePath(map.id);
-  await writeFile(filePath, `${toJSON(map)}\n`, "utf8");
+  await writeFileAtomically(filePath, `${toJSON(map)}\n`);
+};
+
+const saveMapLocally = async (map: MindMap): Promise<void> => {
+  markLocalWrite(map.id);
+  await saveMap(map);
 };
 
 const listMapIds = async (): Promise<string[]> => {
@@ -142,6 +167,13 @@ const listMaps = async (): Promise<MapSummary[]> => {
   return maps.sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
 };
 
+const loadMapsRecord = async (): Promise<Record<string, MindMap>> => {
+  const mapIds = await listMapIds();
+  const maps = await Promise.all(mapIds.map((mapId) => loadMap(mapId)));
+
+  return Object.fromEntries(maps.map((map) => [map.id, map]));
+};
+
 const loadActiveMap = async (): Promise<MindMap | null> => {
   const config = await readConfig();
 
@@ -156,6 +188,10 @@ const loadActiveMap = async (): Promise<MindMap | null> => {
   }
 
   return await loadMap(maps[0].id);
+};
+
+const setActiveMapId = async (mapId: string | null): Promise<void> => {
+  await writeConfig({ activeMapId: mapId });
 };
 
 const assertString = (value: unknown, fieldName: string): string => {
@@ -234,7 +270,7 @@ const handleMapChange = async (mapId: string): Promise<void> => {
 
   try {
     const map = await loadMap(mapId);
-    broadcast({ type: "map:update", payload: map });
+    broadcast({ type: "map:update", payload: map }, map.id);
   } catch {
     // 破損ファイルは監視対象外として扱い、配信だけ止める
   }
@@ -250,9 +286,8 @@ const updateMapAndPersist = async (mapId: string, updater: (map: MindMap) => Min
 };
 
 const saveMapAndBroadcast = async (nextMap: MindMap): Promise<void> => {
-  await saveMap(nextMap);
-  markLocalWrite(nextMap.id);
-  broadcast({ type: "map:update", payload: nextMap });
+  await saveMapLocally(nextMap);
+  broadcast({ type: "map:update", payload: nextMap }, nextMap.id);
 };
 
 const findWebDistDir = async (): Promise<string | null> => {
@@ -311,6 +346,66 @@ export const startServer = async (port: number): Promise<FastifyInstance> => {
   });
 
   fastify.get("/api/maps", async () => listMaps());
+
+  fastify.get("/api/bridge/workspaces", async () => {
+    const config = await readConfig();
+    const maps = await loadMapsRecord();
+
+    return buildBridgePayload(maps, config.activeMapId);
+  });
+
+  fastify.post<{ Body: unknown }>("/api/bridge/workspaces", async (request, reply) => {
+    try {
+      const config = await readConfig();
+      const currentMaps = await loadMapsRecord();
+      const merged = mergeImportedBridgePayload(currentMaps, config.activeMapId, request.body);
+
+      for (const map of Object.values(merged.maps)) {
+        await saveMapLocally(map);
+      }
+
+      await setActiveMapId(merged.activeMapId);
+
+      if (merged.activeMapId && merged.maps[merged.activeMapId]) {
+        broadcast(
+          { type: "map:update", payload: merged.maps[merged.activeMapId] },
+          merged.activeMapId,
+        );
+      }
+
+      return {
+        ok: true,
+        activeMapId: merged.activeMapId,
+        importedMapCount: merged.importedMapCount,
+        totalMapCount: Object.keys(merged.maps).length,
+      };
+    } catch (error) {
+      reply.code(400);
+      return respondWithError(error);
+    }
+  });
+
+  fastify.post<{ Body: CreateMapBody }>("/api/maps", async (request, reply) => {
+    try {
+      const title = assertString(request.body?.title, "title");
+      const map = createMindMap(title);
+
+      await saveMapLocally(map);
+
+      return {
+        id: map.id,
+        title: map.title,
+        filePath: getMapFilePath(map.id),
+        createdAt: map.createdAt,
+        updatedAt: map.updatedAt,
+        nodeCount: Object.keys(map.nodes).length,
+        isActive: false,
+      } satisfies MapSummary;
+    } catch (error) {
+      reply.code(400);
+      return respondWithError(error);
+    }
+  });
 
   fastify.get<{ Params: MapParams }>("/api/maps/:id", async (request, reply) => {
     try {
@@ -386,8 +481,8 @@ export const startServer = async (port: number): Promise<FastifyInstance> => {
     }
 
     wss.handleUpgrade(request, socket, head, (ws) => {
-      addClient(ws);
       let activeMapId: string | null = null;
+      addClient(ws, () => activeMapId);
 
       ws.on("close", () => {
         removeClient(ws);
@@ -433,6 +528,17 @@ export const startServer = async (port: number): Promise<FastifyInstance> => {
                   }),
                 );
               }
+              return;
+            }
+
+            if (parsed.type === "map:open") {
+              const payload = parsed.payload as OpenMapBody;
+              const mapId = assertString(payload.mapId, "mapId");
+              const map = await loadMap(mapId);
+
+              await setActiveMapId(map.id);
+              activeMapId = map.id;
+              ws.send(JSON.stringify({ type: "map:update", payload: map }));
               return;
             }
 

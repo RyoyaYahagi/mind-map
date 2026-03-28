@@ -12,13 +12,13 @@ import {
 import type { MindMap, NodePosition } from "@mindmap/core";
 
 import { MindMapNode as MindMapNodeView, type MindMapNodeData } from "./MindMapNode.js";
-import { centerNodeAt, getFallbackNodePositions, getNodeDimensions, getNodePosition } from "./nodeLayout.js";
+import { centerNodeAt, getBranchDirection, getFallbackNodePositions, getNodeDimensions, getNodePosition } from "./nodeLayout.js";
 
 type MindMapCanvasProps = {
   map: MindMap | null;
   selectedNodeId: string | null;
   editingNodeId: string | null;
-  onAddChild: (nodeId: string) => void;
+  onAddChild: (nodeId: string, preferredDirection?: "left" | "right") => void;
   onAddRootNode: (position: NodePosition) => void;
   onDeleteNode: (nodeId: string) => void;
   onOpenPaneContextMenu: (position: { flowPosition: NodePosition; x: number; y: number }) => void;
@@ -82,6 +82,7 @@ function MindMapCanvasInner({
       map
         ? Object.values(map.nodes).map((node) => ({
             data: {
+              branchDirection: getBranchDirection(map, node.id, fallbackPositions),
               editingNodeId,
               node,
               isRoot: node.id === map.rootId,
@@ -115,7 +116,7 @@ function MindMapCanvasInner({
       map
         ? Object.values(map.nodes).flatMap((node) => {
             const parentPosition = getNodePosition(map, node.id, fallbackPositions);
-            const parentDimensions = getNodeDimensions(node.id === map.rootId);
+            const parentDimensions = getNodeDimensions(node.id === map.rootId, node.text);
             const parentCenterX = parentPosition.x + parentDimensions.width / 2;
 
             return node.children.flatMap((childId) => {
@@ -126,9 +127,11 @@ function MindMapCanvasInner({
                 }
 
                 const childPosition = getNodePosition(map, childId, fallbackPositions);
-                const childDimensions = getNodeDimensions(childId === map.rootId);
+                const childDimensions = getNodeDimensions(childId === map.rootId, child.text);
                 const childCenterX = childPosition.x + childDimensions.width / 2;
-                const childIsLeft = childCenterX < parentCenterX;
+                const childIsLeft =
+                  getBranchDirection(map, childId, fallbackPositions) === "left" ||
+                  childCenterX < parentCenterX;
 
                 return [{
                   id: `${node.id}-${childId}`,
@@ -170,7 +173,13 @@ function MindMapCanvasInner({
 
   const handleCanvasDoubleClick = useCallback(
     (event: ReactMouseEvent<HTMLDivElement>) => {
-      if (!(event.target instanceof HTMLElement) || !event.target.closest(".react-flow__pane")) {
+      if (!(event.target instanceof Element)) {
+        return;
+      }
+
+      const target = event.target;
+
+      if (target.closest(".react-flow__node, .react-flow__edge, .react-flow__controls")) {
         return;
       }
 
@@ -202,6 +211,7 @@ function MindMapCanvasInner({
         nodeTypes={nodeTypes}
         nodesConnectable={false}
         nodesDraggable
+        zoomOnDoubleClick={false}
         onNodeDragStart={handleNodeDragStart}
         onNodeDragStop={handleNodeDragStop}
         onNodeClick={(_, node) => onSelectNode(node.id)}

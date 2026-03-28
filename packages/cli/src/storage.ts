@@ -1,4 +1,4 @@
-import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, rename, writeFile } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
 import { homedir } from "node:os";
 
@@ -60,6 +60,12 @@ export const getMapsDir = (): string => MAPS_DIR;
 
 export const getMapFilePath = (mapId: string): string => join(MAPS_DIR, `${mapId}.mindmap.json`);
 
+const writeFileAtomically = async (filePath: string, contents: string): Promise<void> => {
+  const tempPath = `${filePath}.${process.pid}.${Date.now()}.tmp`;
+  await writeFile(tempPath, contents, "utf8");
+  await rename(tempPath, filePath);
+};
+
 export const loadConfig = async (): Promise<CliConfig> => {
   await ensureStorage();
 
@@ -95,7 +101,7 @@ export const loadConfig = async (): Promise<CliConfig> => {
 
 export const saveConfig = async (config: CliConfig): Promise<void> => {
   await ensureStorage();
-  await writeFile(CONFIG_PATH, `${JSON.stringify(config, null, 2)}\n`, "utf8");
+  await writeFileAtomically(CONFIG_PATH, `${JSON.stringify(config, null, 2)}\n`);
 };
 
 const parseMapFile = async (filePath: string): Promise<MindMap> => {
@@ -115,7 +121,7 @@ const parseMapFile = async (filePath: string): Promise<MindMap> => {
 export const saveMap = async (map: MindMap): Promise<string> => {
   await ensureStorage();
   const filePath = getMapFilePath(map.id);
-  await writeFile(filePath, `${JSON.stringify(map, null, 2)}\n`, "utf8");
+  await writeFileAtomically(filePath, `${JSON.stringify(map, null, 2)}\n`);
   return filePath;
 };
 

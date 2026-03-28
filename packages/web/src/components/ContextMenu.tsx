@@ -37,7 +37,7 @@ export function ContextMenu({ onAddRootNode, onClose, position }: ContextMenuPro
             onClick={onAddRootNode}
             type="button"
           >
-            ルートノードを追加
+            独立ルートノードを追加
           </button>
         </div>
       </div>

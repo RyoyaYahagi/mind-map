@@ -17,6 +17,19 @@ const createDefaultChildPosition = (parent: MindMapNode): NodePosition => ({
   y: (parent.position?.y ?? 0) + parent.children.length * DEFAULT_CHILD_OFFSET_Y,
 });
 
+const createDetachedNodePosition = (map: MindMap): NodePosition => {
+  const topLevelNodes = Object.values(map.nodes).filter((node) => node.parent === null);
+  const baselineY =
+    topLevelNodes.length === 0
+      ? 0
+      : Math.max(...topLevelNodes.map((node) => node.position?.y ?? 0)) + DEFAULT_CHILD_OFFSET_Y * 1.5;
+
+  return {
+    x: map.nodes[map.rootId]?.position?.x ?? 0,
+    y: baselineY,
+  };
+};
+
 const createNode = (
   text: string,
   parent: string | null,
@@ -132,6 +145,23 @@ export const addNode = (
   };
 };
 
+export const addDetachedNode = (
+  map: MindMap,
+  text: string,
+  position?: NodePosition,
+): { map: MindMap; node: MindMapNode } => {
+  const timestamp = createTimestamp();
+  const node = createNode(text, null, timestamp, position ?? createDetachedNodePosition(map));
+  const nodes = cloneNodes(map);
+
+  nodes[node.id] = node;
+
+  return {
+    map: updateMap(map, nodes, timestamp),
+    node,
+  };
+};
+
 export const editNode = (map: MindMap, nodeId: string, text: string): MindMap => {
   const node = requireNode(map, nodeId);
   const timestamp = createTimestamp();
@@ -186,7 +216,6 @@ export const deleteNode = (map: MindMap, nodeId: string): MindMap => {
   }
 
   const node = requireNode(map, nodeId);
-  const parent = requireNode(map, node.parent as string);
   const timestamp = createTimestamp();
   const nodes = cloneNodes(map);
 
@@ -194,11 +223,15 @@ export const deleteNode = (map: MindMap, nodeId: string): MindMap => {
     delete nodes[descendantId];
   }
 
-  nodes[parent.id] = {
-    ...parent,
-    children: parent.children.filter((childId) => childId !== nodeId),
-    updatedAt: timestamp,
-  };
+  if (node.parent) {
+    const parent = requireNode(map, node.parent);
+
+    nodes[parent.id] = {
+      ...parent,
+      children: parent.children.filter((childId) => childId !== nodeId),
+      updatedAt: timestamp,
+    };
+  }
 
   return updateMap(map, nodes, timestamp);
 };
@@ -209,7 +242,7 @@ export const moveNode = (map: MindMap, nodeId: string, newParentId: string): Min
   }
 
   const node = requireNode(map, nodeId);
-  const currentParent = requireNode(map, node.parent as string);
+  const currentParent = node.parent ? requireNode(map, node.parent) : null;
   const newParent = requireNode(map, newParentId);
 
   if (nodeId === newParentId) {
@@ -227,11 +260,13 @@ export const moveNode = (map: MindMap, nodeId: string, newParentId: string): Min
   const timestamp = createTimestamp();
   const nodes = cloneNodes(map);
 
-  nodes[currentParent.id] = {
-    ...currentParent,
-    children: currentParent.children.filter((childId) => childId !== nodeId),
-    updatedAt: timestamp,
-  };
+  if (currentParent) {
+    nodes[currentParent.id] = {
+      ...currentParent,
+      children: currentParent.children.filter((childId) => childId !== nodeId),
+      updatedAt: timestamp,
+    };
+  }
 
   nodes[newParent.id] = {
     ...newParent,
@@ -311,7 +346,9 @@ export const getMapInfo = (
   requireNode(map, map.rootId);
 
   let maxDepth = 0;
-  const queue: Array<{ id: string; depth: number }> = [{ id: map.rootId, depth: 0 }];
+  const queue: Array<{ id: string; depth: number }> = Object.values(map.nodes)
+    .filter((node) => node.parent === null)
+    .map((node) => ({ id: node.id, depth: 0 }));
 
   while (queue.length > 0) {
     const current = queue.shift();
