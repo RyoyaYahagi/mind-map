@@ -132,9 +132,8 @@ export const useMindMap = () => {
     () => ({
       addNode: (parentId: string, text: string, position?: NodePosition) => {
         const requestId = crypto.randomUUID();
-        const targetMapId = map?.id;
         const added = applyStoreChange((store) => {
-          const result = addNodeToActiveMap(store, parentId, text, position, targetMapId);
+          const result = addNodeToActiveMap(store, parentId, text, position);
 
           if (!result) {
             return null;
@@ -158,9 +157,8 @@ export const useMindMap = () => {
       },
       addDetachedNode: (text: string, position?: NodePosition) => {
         const requestId = crypto.randomUUID();
-        const targetMapId = map?.id;
         const added = applyStoreChange((store) => {
-          const result = addDetachedNodeToActiveMap(store, text, position, targetMapId);
+          const result = addDetachedNodeToActiveMap(store, text, position);
 
           if (!result) {
             return null;
@@ -184,7 +182,7 @@ export const useMindMap = () => {
       },
       deleteNode: (nodeId: string) =>
         applyStoreChange((store) => {
-          const result = deleteNodeFromActiveMap(store, nodeId, map?.id);
+          const result = deleteNodeFromActiveMap(store, nodeId);
 
           if (!result) {
             return null;
@@ -197,7 +195,7 @@ export const useMindMap = () => {
         }) ?? false,
       editNode: (nodeId: string, text: string) =>
         applyStoreChange((store) => {
-          const result = editNodeInActiveMap(store, nodeId, text, map?.id);
+          const result = editNodeInActiveMap(store, nodeId, text);
 
           if (!result) {
             return null;
@@ -210,7 +208,7 @@ export const useMindMap = () => {
         }) ?? false,
       setNodeNotes: (nodeId: string, notes: string) =>
         applyStoreChange((store) => {
-          const result = saveNodeNotesInActiveMap(store, nodeId, notes, map?.id);
+          const result = saveNodeNotesInActiveMap(store, nodeId, notes);
 
           if (!result) {
             return null;
@@ -223,7 +221,7 @@ export const useMindMap = () => {
         }) ?? false,
       moveNode: (nodeId: string, newParentId: string) =>
         applyStoreChange((store) => {
-          const result = moveNodeInActiveMap(store, nodeId, newParentId, map?.id);
+          const result = moveNodeInActiveMap(store, nodeId, newParentId);
 
           if (!result) {
             return null;
@@ -236,7 +234,7 @@ export const useMindMap = () => {
         }) ?? false,
       setNodePosition: (nodeId: string, position: NodePosition) =>
         applyStoreChange((store) => {
-          const result = setNodePositionInActiveMap(store, nodeId, position, map?.id);
+          const result = setNodePositionInActiveMap(store, nodeId, position);
 
           if (!result) {
             return null;
@@ -343,7 +341,7 @@ export const useMindMap = () => {
         }
       },
     }),
-    [applyStoreChange, getStorage, map?.id, syncFromStore],
+    [applyStoreChange, getStorage, syncFromStore],
   );
 
   return {

@@ -159,22 +159,33 @@ describe("workspaceStore", () => {
     expect(getActiveMap(merged)?.title).toBe("CLI Map");
   });
 
-  it("ignores stale map-targeted updates after workspace switches", () => {
+  it("updates the current active workspace after workspace switches", () => {
     const initial = readWorkspaceStore(new MemoryStorage());
-    const firstMapId = initial.activeMapId ?? "";
     const created = createWorkspace(initial, "Second");
 
-    const staleUpdate = addNodeToActiveMap(created.store, created.map.rootId, "Child", undefined, firstMapId);
+    const staleUpdate = addNodeToActiveMap(created.store, created.map.rootId, "Child");
 
     expect(staleUpdate).not.toBeNull();
     expect(staleUpdate?.map.id).toBe(created.map.id);
     expect(staleUpdate?.map.nodes[staleUpdate.value.nodeId]?.parent).toBe(created.map.rootId);
   });
 
-  it("returns null when no workspace contains the target node", () => {
+  it("ignores stale node-targeted updates after workspace switches", () => {
+    const initial = readWorkspaceStore(new MemoryStorage());
+    const initialActiveMap = getActiveMap(initial);
+    const created = createWorkspace(initial, "Second");
+
+    const staleUpdate = saveNodeNotesInActiveMap(created.store, initialActiveMap?.rootId ?? "", "stale note");
+
+    expect(staleUpdate).toBeNull();
+    expect(getActiveMap(created.store)?.id).toBe(created.map.id);
+    expect(created.store.maps[initialActiveMap?.id ?? ""]?.nodes[initialActiveMap?.rootId ?? ""]?.notes).toBeUndefined();
+  });
+
+  it("returns null when the active workspace does not contain the target node", () => {
     const initial = readWorkspaceStore(new MemoryStorage());
 
-    const staleUpdate = addNodeToActiveMap(initial, "missing-node-id", "Child", undefined, "missing-map-id");
+    const staleUpdate = addNodeToActiveMap(initial, "missing-node-id", "Child");
 
     expect(staleUpdate).toBeNull();
   });
