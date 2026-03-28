@@ -6,6 +6,7 @@ import {
   WORKSPACE_STORAGE_KEY,
   addNodeToActiveMap,
   createWorkspace,
+  ensureWorkspaceStore,
   getActiveMap,
   listWorkspaceSummaries,
   openWorkspace,
@@ -35,6 +36,15 @@ describe("workspaceStore", () => {
 
     expect(activeMap?.title).toBe("新しいワークスペース");
     expect(listWorkspaceSummaries(store)).toHaveLength(1);
+  });
+
+  it("persists the default workspace on first initialization", () => {
+    const storage = new MemoryStorage();
+    const first = ensureWorkspaceStore(storage);
+    const second = ensureWorkspaceStore(storage);
+
+    expect(first.activeMapId).toBe(second.activeMapId);
+    expect(storage.getItem(WORKSPACE_STORAGE_KEY)).not.toBeNull();
   });
 
   it("persists and restores active workspace state", () => {

@@ -7,6 +7,7 @@ import {
   createWorkspace,
   deleteNodeFromActiveMap,
   editNodeInActiveMap,
+  ensureWorkspaceStore,
   getActiveMap,
   listWorkspaceSummaries,
   moveNodeInActiveMap,
@@ -53,7 +54,7 @@ export const useMindMap = () => {
         throw new Error("ブラウザのストレージへアクセスできません");
       }
 
-      const store = readWorkspaceStore(storage);
+      const store = ensureWorkspaceStore(storage);
       syncFromStore(store);
     } catch (error) {
       setStatus("error");
@@ -92,7 +93,7 @@ export const useMindMap = () => {
         throw new Error("ブラウザのストレージへアクセスできません");
       }
 
-      const store = readWorkspaceStore(storage);
+      const store = ensureWorkspaceStore(storage);
       const result = mutate(store);
 
       if (!result) {

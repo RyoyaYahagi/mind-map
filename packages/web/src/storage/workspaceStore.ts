@@ -180,6 +180,16 @@ export const writeWorkspaceStore = (storage: StorageLike, store: WorkspaceStore)
   return normalizedStore;
 };
 
+export const ensureWorkspaceStore = (storage: StorageLike): WorkspaceStore => {
+  const existing = parseStore(storage.getItem(WORKSPACE_STORAGE_KEY));
+
+  if (existing) {
+    return existing;
+  }
+
+  return writeWorkspaceStore(storage, createDefaultStore());
+};
+
 export const listWorkspaceSummaries = (store: WorkspaceStore): WorkspaceSummary[] =>
   sortMaps(store.maps).map((map) => createWorkspaceSummary(map, store.activeMapId));
 
