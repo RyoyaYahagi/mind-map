@@ -158,15 +158,6 @@ export default function App() {
     setSelectedNodeId(nodeId);
   };
 
-  const openNodeDetails = (nodeId: string) => {
-    if (!map?.nodes[nodeId]) {
-      return;
-    }
-
-    setEditingNodeId(null);
-    selectNode(nodeId);
-  };
-
   const createNode = (
     parentId: string,
     position?: NodePosition,
@@ -470,7 +461,6 @@ export default function App() {
             onAddChild={(nodeId, preferredDirection) => createNode(nodeId, undefined, preferredDirection)}
             onAddRootNode={(position) => createNode(map?.rootId ?? "", position)}
             onDeleteNode={deleteNode}
-            onOpenDetails={openNodeDetails}
             onOpenPaneContextMenu={({ flowPosition, x, y }) =>
               setPaneContextMenu({
                 flowPosition,

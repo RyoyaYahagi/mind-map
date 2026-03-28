@@ -21,7 +21,6 @@ type MindMapCanvasProps = {
   onAddChild: (nodeId: string, preferredDirection?: "left" | "right") => void;
   onAddRootNode: (position: NodePosition) => void;
   onDeleteNode: (nodeId: string) => void;
-  onOpenDetails: (nodeId: string) => void;
   onOpenPaneContextMenu: (position: { flowPosition: NodePosition; x: number; y: number }) => void;
   onRequestEdit: (nodeId: string) => void;
   onSaveEdit: (nodeId: string, text: string) => void;
@@ -69,7 +68,6 @@ function MindMapCanvasInner({
   onAddChild,
   onAddRootNode,
   onDeleteNode,
-  onOpenDetails,
   onOpenPaneContextMenu,
   onRequestEdit,
   onSaveEdit,
@@ -90,7 +88,6 @@ function MindMapCanvasInner({
               isRoot: node.id === map.rootId,
               onAddChild,
               onDelete: onDeleteNode,
-              onOpenDetails,
               onRequestEdit,
               onSaveEdit,
               onSelect: onSelectNode,
@@ -108,7 +105,6 @@ function MindMapCanvasInner({
       map,
       onAddChild,
       onDeleteNode,
-      onOpenDetails,
       onRequestEdit,
       onSaveEdit,
       onSelectNode,

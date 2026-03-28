@@ -12,7 +12,6 @@ export type MindMapNodeData = {
   editingNodeId: string | null;
   onAddChild: (nodeId: string, preferredDirection?: "left" | "right") => void;
   onDelete: (nodeId: string) => void;
-  onOpenDetails: (nodeId: string) => void;
   onRequestEdit: (nodeId: string) => void;
   onSaveEdit: (nodeId: string, text: string) => void;
   onSelect: (nodeId: string) => void;
@@ -100,11 +99,6 @@ export function MindMapNode({ data, selected }: NodeProps<MindMapFlowNode>) {
     data.onDelete(node.id);
   };
 
-  const handleOpenDetails = (event: MouseEvent<HTMLButtonElement>) => {
-    event.stopPropagation();
-    data.onOpenDetails(node.id);
-  };
-
   const handleSelect = () => {
     data.onSelect(node.id);
   };
@@ -144,7 +138,7 @@ export function MindMapNode({ data, selected }: NodeProps<MindMapFlowNode>) {
     : "";
   const deleteButtonPositionClass =
     branchDirection === "right" ? "left-3 top-3" : "right-3 top-3";
-  const detailsButtonPositionClass = isRoot
+  const notesIndicatorPositionClass = isRoot
     ? "right-3 top-3"
     : branchDirection === "right"
       ? "right-3 top-3"
@@ -194,21 +188,16 @@ export function MindMapNode({ data, selected }: NodeProps<MindMapFlowNode>) {
         </button>
       ) : null}
 
-      <button
-        className={[
-          "nodrag nopan absolute flex h-7 min-w-14 items-center justify-center gap-1 rounded-full border px-2.5 text-[11px] font-semibold transition",
-          detailsButtonPositionClass,
-          hasNotes
-            ? "border-sky-300/55 bg-sky-400/16 text-sky-100 hover:border-sky-200/80 hover:bg-sky-300/22"
-            : "border-slate-600/80 bg-slate-950/90 text-slate-300 hover:border-slate-400/90 hover:text-slate-100",
-        ].join(" ")}
-        onClick={handleOpenDetails}
-        onMouseDown={preventButtonDragStart}
-        type="button"
-      >
-        {hasNotes ? <span className="h-1.5 w-1.5 rounded-full bg-sky-300" /> : null}
-        <span>詳細</span>
-      </button>
+      {hasNotes ? (
+        <div
+          className={[
+            "pointer-events-none absolute flex h-7 min-w-7 items-center justify-center rounded-full border border-sky-300/45 bg-sky-400/16 px-2",
+            notesIndicatorPositionClass,
+          ].join(" ")}
+        >
+          <span className="h-2 w-2 rounded-full bg-sky-300" />
+        </div>
+      ) : null}
 
       {selected ? (
         <>

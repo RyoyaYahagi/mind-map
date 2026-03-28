@@ -62,7 +62,7 @@ export function NodeDetailsPanel({ node, onChangeNotes }: NodeDetailsPanelProps)
           <div className="rounded-3xl border border-dashed border-slate-700/80 bg-slate-900/60 px-5 py-6 text-center">
             <p className="text-sm font-semibold text-slate-200">詳細パネルは待機中です</p>
             <p className="mt-2 text-xs leading-5 text-slate-500">
-              ノードをクリックするか、ノード右上の詳細ボタンから開けます。
+              マップ上のノードを選択すると、このパネルに詳細を表示できます。
             </p>
           </div>
         </div>
