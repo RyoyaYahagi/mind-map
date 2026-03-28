@@ -29,6 +29,25 @@ export type { WorkspaceSummary } from "../storage/workspaceStore.js";
 export type MindMapStatus = "open" | "local" | "error";
 export type BridgeSyncStatus = "idle" | "importing" | "exporting";
 
+const checkBridgeAvailability = async (): Promise<boolean> => {
+  try {
+    const response = await fetch("/api/bridge/workspaces", {
+      headers: {
+        Accept: "application/json",
+      },
+    });
+
+    if (!response.ok) {
+      return false;
+    }
+
+    fromBridgePayload(await response.json());
+    return true;
+  } catch {
+    return false;
+  }
+};
+
 const readApiError = async (response: Response): Promise<string> => {
   try {
     const payload = await response.json() as { error?: string; message?: string };
@@ -47,6 +66,7 @@ export const useMindMap = () => {
   const [bridgeStatus, setBridgeStatus] = useState<BridgeSyncStatus>("idle");
   const [bridgeMessage, setBridgeMessage] = useState<string | null>(null);
   const [bridgeError, setBridgeError] = useState<string | null>(null);
+  const [isBridgeAvailable, setIsBridgeAvailable] = useState(false);
 
   const getStorage = useCallback((): Storage | null => {
     if (typeof window === "undefined") {
@@ -82,6 +102,12 @@ export const useMindMap = () => {
   useEffect(() => {
     void refreshWorkspaces();
   }, [refreshWorkspaces]);
+
+  useEffect(() => {
+    void (async () => {
+      setIsBridgeAvailable(await checkBridgeAvailability());
+    })();
+  }, []);
 
   useEffect(() => {
     const onStorage = (event: StorageEvent) => {
@@ -347,6 +373,7 @@ export const useMindMap = () => {
   return {
     actions,
     bridge: {
+      available: isBridgeAvailable,
       error: bridgeError,
       message: bridgeMessage,
       status: bridgeStatus,

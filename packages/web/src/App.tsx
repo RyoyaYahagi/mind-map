@@ -428,63 +428,65 @@ export default function App() {
                       </button>
                     )}
 
-                    <div className="mt-2 rounded-2xl border border-emerald-400/20 bg-slate-900/90 px-3 py-3 text-left shadow-[0_12px_28px_rgba(15,23,42,0.28)]">
-                      <p className="text-[11px] font-bold tracking-[0.16em] text-emerald-100">
-                        CLI ブリッジ
-                      </p>
-                      <p className="mt-1 text-xs leading-5 text-slate-300">
-                        このブラウザの `localStorage` と CLI 保存領域 `~/.mindmap` の間でワークスペースをマージします。
-                      </p>
-                      <div className="mt-3 grid gap-2">
-                        <button
-                          className="rounded-2xl border border-emerald-300/40 bg-emerald-400/10 px-3 py-3 text-left text-white transition hover:border-emerald-200/60 hover:bg-emerald-400/15 disabled:cursor-not-allowed disabled:opacity-60"
-                          disabled={isBridgeBusy}
-                          onClick={() => {
-                            const ok = window.confirm(
-                              "CLI保存領域 (~/.mindmap) のワークスペースをこのブラウザへマージします。同じIDのマップはCLI側で上書きされます。続けますか？",
-                            );
+                    {bridge.available ? (
+                      <div className="mt-2 rounded-2xl border border-emerald-400/20 bg-slate-900/90 px-3 py-3 text-left shadow-[0_12px_28px_rgba(15,23,42,0.28)]">
+                        <p className="text-[11px] font-bold tracking-[0.16em] text-emerald-100">
+                          CLI ブリッジ
+                        </p>
+                        <p className="mt-1 text-xs leading-5 text-slate-300">
+                          このブラウザの `localStorage` と CLI 保存領域 `~/.mindmap` の間でワークスペースをマージします。
+                        </p>
+                        <div className="mt-3 grid gap-2">
+                          <button
+                            className="rounded-2xl border border-emerald-300/40 bg-emerald-400/10 px-3 py-3 text-left text-white transition hover:border-emerald-200/60 hover:bg-emerald-400/15 disabled:cursor-not-allowed disabled:opacity-60"
+                            disabled={isBridgeBusy}
+                            onClick={() => {
+                              const ok = window.confirm(
+                                "CLI保存領域 (~/.mindmap) のワークスペースをこのブラウザへマージします。同じIDのマップはCLI側で上書きされます。続けますか？",
+                              );
 
-                            if (!ok) {
-                              return;
-                            }
+                              if (!ok) {
+                                return;
+                              }
 
-                            void actions.importFromCliBridge();
-                          }}
-                          type="button"
-                        >
-                          <span className="block text-sm font-semibold">
-                            {bridge.status === "importing" ? "CLIから取り込み中..." : "CLIから取り込む"}
-                          </span>
-                          <span className="mt-1 block text-xs text-slate-200">
-                            CLI保存領域の内容を現在のブラウザへマージします
-                          </span>
-                        </button>
+                              void actions.importFromCliBridge();
+                            }}
+                            type="button"
+                          >
+                            <span className="block text-sm font-semibold">
+                              {bridge.status === "importing" ? "CLIから取り込み中..." : "CLIから取り込む"}
+                            </span>
+                            <span className="mt-1 block text-xs text-slate-200">
+                              CLI保存領域の内容を現在のブラウザへマージします
+                            </span>
+                          </button>
 
-                        <button
-                          className="rounded-2xl border border-sky-300/40 bg-sky-400/10 px-3 py-3 text-left text-white transition hover:border-sky-200/60 hover:bg-sky-400/15 disabled:cursor-not-allowed disabled:opacity-60"
-                          disabled={isBridgeBusy}
-                          onClick={() => {
-                            const ok = window.confirm(
-                              "このブラウザのワークスペースをCLI保存領域 (~/.mindmap) へ書き出します。同じIDのマップはブラウザ側で上書きされます。続けますか？",
-                            );
+                          <button
+                            className="rounded-2xl border border-sky-300/40 bg-sky-400/10 px-3 py-3 text-left text-white transition hover:border-sky-200/60 hover:bg-sky-400/15 disabled:cursor-not-allowed disabled:opacity-60"
+                            disabled={isBridgeBusy}
+                            onClick={() => {
+                              const ok = window.confirm(
+                                "このブラウザのワークスペースをCLI保存領域 (~/.mindmap) へ書き出します。同じIDのマップはブラウザ側で上書きされます。続けますか？",
+                              );
 
-                            if (!ok) {
-                              return;
-                            }
+                              if (!ok) {
+                                return;
+                              }
 
-                            void actions.exportToCliBridge();
-                          }}
-                          type="button"
-                        >
-                          <span className="block text-sm font-semibold">
-                            {bridge.status === "exporting" ? "CLIへ書き出し中..." : "CLIへ書き出す"}
-                          </span>
-                          <span className="mt-1 block text-xs text-slate-200">
-                            現在のブラウザ内容をCLI保存領域へマージします
-                          </span>
-                        </button>
+                              void actions.exportToCliBridge();
+                            }}
+                            type="button"
+                          >
+                            <span className="block text-sm font-semibold">
+                              {bridge.status === "exporting" ? "CLIへ書き出し中..." : "CLIへ書き出す"}
+                            </span>
+                            <span className="mt-1 block text-xs text-slate-200">
+                              現在のブラウザ内容をCLI保存領域へマージします
+                            </span>
+                          </button>
+                        </div>
                       </div>
-                    </div>
+                    ) : null}
                   </div>
                 </div>
               ) : null}
@@ -520,12 +522,12 @@ export default function App() {
               {error}
             </span>
           ) : null}
-          {bridge.message ? (
+          {bridge.available && bridge.message ? (
             <span className="max-w-[320px] truncate rounded-full border border-emerald-400/20 bg-emerald-400/10 px-3 py-1 text-xs text-emerald-200">
               {bridge.message}
             </span>
           ) : null}
-          {bridge.error ? (
+          {bridge.available && bridge.error ? (
             <span className="max-w-[320px] truncate rounded-full border border-amber-400/20 bg-amber-400/10 px-3 py-1 text-xs text-amber-200">
               {bridge.error}
             </span>
