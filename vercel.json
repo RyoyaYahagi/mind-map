@@ -1,6 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "installCommand": "npm install",
-  "buildCommand": "npm run build --workspace @mindmap/web",
+  "buildCommand": "npm run build --workspace @mindmap/core --workspace @mindmap/web",
   "outputDirectory": "packages/web/dist"
 }
