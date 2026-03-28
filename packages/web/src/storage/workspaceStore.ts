@@ -5,6 +5,7 @@ import {
   editNode,
   fromJSON,
   moveNode,
+  setNote,
   setNodePosition,
   toJSON,
   type MindMap,
@@ -296,6 +297,24 @@ export const editNodeInActiveMap = (
 
   return updateMap(store, (map) => ({
     map: editNode(map, nodeId, text),
+    value: true,
+  }), targetMap.id);
+};
+
+export const saveNodeNotesInActiveMap = (
+  store: WorkspaceStore,
+  nodeId: string,
+  notes: string,
+  mapId?: string,
+): ActiveMapMutationResult<boolean> | null => {
+  const targetMap = getTargetMapByNodeId(store, nodeId, mapId);
+
+  if (!targetMap) {
+    return null;
+  }
+
+  return updateMap(store, (map) => ({
+    map: setNote(map, nodeId, notes),
     value: true,
   }), targetMap.id);
 };

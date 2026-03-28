@@ -11,6 +11,7 @@ import {
   listWorkspaceSummaries,
   openWorkspace,
   readWorkspaceStore,
+  saveNodeNotesInActiveMap,
   setNodePositionInActiveMap,
   writeWorkspaceStore,
   type WorkspaceStore,
@@ -88,6 +89,21 @@ describe("workspaceStore", () => {
     const activeMap = getActiveMap(moved!.store);
 
     expect(activeMap?.nodes[added!.value.nodeId]?.position).toEqual({ x: 480, y: 240 });
+  });
+
+  it("saves notes for the selected node and preserves them after persistence", () => {
+    const storage = new MemoryStorage();
+    const initialStore = ensureWorkspaceStore(storage);
+    const rootId = initialStore.activeMapId ? getActiveMap(initialStore)?.rootId ?? "" : "";
+
+    const updated = saveNodeNotesInActiveMap(initialStore, rootId, "詳細メモ\n複数行");
+
+    expect(updated).not.toBeNull();
+
+    writeWorkspaceStore(storage, updated!.store);
+    const restored = readWorkspaceStore(storage);
+
+    expect(getActiveMap(restored)?.nodes[rootId]?.notes).toBe("詳細メモ\n複数行");
   });
 
   it("opens an existing workspace by id", () => {

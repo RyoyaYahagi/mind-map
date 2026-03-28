@@ -4,6 +4,7 @@ import type { NodePosition } from "@mindmap/core";
 
 import { ContextMenu } from "./components/ContextMenu.js";
 import { MindMapCanvas } from "./components/MindMapCanvas.js";
+import { NodeDetailsPanel } from "./components/NodeDetailsPanel.js";
 import { getBranchDirection, getFallbackNodePositions, getNextChildPosition } from "./components/nodeLayout.js";
 import { useMindMap } from "./hooks/useMindMap.js";
 
@@ -151,6 +152,21 @@ export default function App() {
     queueMicrotask(() => setEditingNodeId(nodeId));
   };
 
+  const selectNode = (nodeId: string | null) => {
+    setPaneContextMenu(null);
+    closeWorkspaceMenu();
+    setSelectedNodeId(nodeId);
+  };
+
+  const openNodeDetails = (nodeId: string) => {
+    if (!map?.nodes[nodeId]) {
+      return;
+    }
+
+    setEditingNodeId(null);
+    selectNode(nodeId);
+  };
+
   const createNode = (
     parentId: string,
     position?: NodePosition,
@@ -218,6 +234,14 @@ export default function App() {
 
     actions.editNode(nodeId, value);
     setEditingNodeId(null);
+  };
+
+  const handleSaveNodeNotes = (nodeId: string, notes: string) => {
+    if (!map?.nodes[nodeId]) {
+      return;
+    }
+
+    actions.setNodeNotes(nodeId, notes);
   };
 
   const deleteNode = (nodeId: string) => {
@@ -438,29 +462,29 @@ export default function App() {
         </div>
       </header>
 
-      <main className="relative z-0 flex min-h-0 flex-1 p-4">
-        <MindMapCanvas
-          editingNodeId={editingNodeId}
-          map={map}
-          onAddChild={(nodeId, preferredDirection) => createNode(nodeId, undefined, preferredDirection)}
-          onAddRootNode={(position) => createNode(map?.rootId ?? "", position)}
-          onDeleteNode={deleteNode}
-          onOpenPaneContextMenu={({ flowPosition, x, y }) =>
-            setPaneContextMenu({
-              flowPosition,
-              position: { x, y },
-            })
-          }
-          onRequestEdit={requestInlineEdit}
-          onSaveEdit={handleSaveEdit}
-          onSelectNode={(nodeId) => {
-            setPaneContextMenu(null);
-            closeWorkspaceMenu();
-            setSelectedNodeId(nodeId || null);
-          }}
-          onSetNodePosition={(nodeId, position) => actions.setNodePosition(nodeId, position)}
-          selectedNodeId={selectedNodeId}
-        />
+      <main className="relative z-0 flex min-h-0 flex-1 flex-col gap-4 p-4 lg:flex-row">
+        <div className="min-h-0 flex-1">
+          <MindMapCanvas
+            editingNodeId={editingNodeId}
+            map={map}
+            onAddChild={(nodeId, preferredDirection) => createNode(nodeId, undefined, preferredDirection)}
+            onAddRootNode={(position) => createNode(map?.rootId ?? "", position)}
+            onDeleteNode={deleteNode}
+            onOpenDetails={openNodeDetails}
+            onOpenPaneContextMenu={({ flowPosition, x, y }) =>
+              setPaneContextMenu({
+                flowPosition,
+                position: { x, y },
+              })
+            }
+            onRequestEdit={requestInlineEdit}
+            onSaveEdit={handleSaveEdit}
+            onSelectNode={(nodeId) => selectNode(nodeId || null)}
+            onSetNodePosition={(nodeId, position) => actions.setNodePosition(nodeId, position)}
+            selectedNodeId={selectedNodeId}
+          />
+        </div>
+        <NodeDetailsPanel node={selectedNode} onChangeNotes={handleSaveNodeNotes} />
       </main>
 
       <ContextMenu

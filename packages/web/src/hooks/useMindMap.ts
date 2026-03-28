@@ -13,6 +13,7 @@ import {
   moveNodeInActiveMap,
   openWorkspace,
   readWorkspaceStore,
+  saveNodeNotesInActiveMap,
   setNodePositionInActiveMap,
   writeWorkspaceStore,
   WORKSPACE_STORAGE_KEY,
@@ -155,6 +156,19 @@ export const useMindMap = () => {
       editNode: (nodeId: string, text: string) =>
         applyStoreChange((store) => {
           const result = editNodeInActiveMap(store, nodeId, text, map?.id);
+
+          if (!result) {
+            return null;
+          }
+
+          return {
+            store: result.store,
+            value: result.value,
+          };
+        }) ?? false,
+      setNodeNotes: (nodeId: string, notes: string) =>
+        applyStoreChange((store) => {
+          const result = saveNodeNotesInActiveMap(store, nodeId, notes, map?.id);
 
           if (!result) {
             return null;
